@@ -117,7 +117,7 @@ fun CitizenNotificationScreen(
             ) {
                 items(notifications) { notification ->
                     val info = notification.toNotificationInfo()
-                    CitizenNotificationItem(notification = info) {
+                    CitizenNotificationItem(notification = info, isRead = notification.isRead) {
                         selectedNotification = notification
                         showSheet = true
                         // Mark as read
@@ -152,6 +152,7 @@ fun CitizenNotificationScreen(
 @Composable
 fun CitizenNotificationItem(
     notification: CitizenNotificationInfo,
+    isRead: Boolean = true,
     onClick: () -> Unit
 ) {
     Card(
@@ -159,57 +160,73 @@ fun CitizenNotificationItem(
             .fillMaxWidth()
             .clickable { onClick() },
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
+        colors = CardDefaults.cardColors(
+            containerColor = if (isRead) Color.White else PrimaryBlue.copy(alpha = 0.03f)
+        ),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Row(
-            modifier = Modifier
-                .padding(16.dp)
-                .fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            // Left color indicator strip
             Box(
                 modifier = Modifier
-                    .size(48.dp)
-                    .clip(CircleShape)
-                    .background(notification.color.copy(alpha = 0.1f)),
-                contentAlignment = Alignment.Center
+                    .width(3.dp)
+                    .height(72.dp)
+                    .background(notification.color, RoundedCornerShape(topStart = 16.dp, bottomStart = 16.dp))
+            )
+
+            Row(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(
-                    imageVector = notification.icon,
-                    contentDescription = null,
-                    tint = notification.color,
-                    modifier = Modifier.size(24.dp)
-                )
-            }
-
-            Spacer(modifier = Modifier.width(16.dp))
-
-            Column(modifier = Modifier.weight(1f)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                Box(
+                    modifier = Modifier
+                        .size(48.dp)
+                        .clip(CircleShape)
+                        .background(notification.color.copy(alpha = 0.1f)),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Text(
-                        text = notification.title,
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.Black
-                    )
-                    Text(
-                        text = notification.time,
-                        fontSize = 11.sp,
-                        color = Color.Gray
+                    Icon(
+                        imageVector = notification.icon,
+                        contentDescription = null,
+                        tint = notification.color,
+                        modifier = Modifier.size(24.dp)
                     )
                 }
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = notification.message,
-                    fontSize = 13.sp,
-                    color = Color.Gray,
-                    lineHeight = 18.sp
-                )
+
+                Spacer(modifier = Modifier.width(16.dp))
+
+                Column(modifier = Modifier.weight(1f)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = notification.title,
+                            fontSize = 15.sp,
+                            fontWeight = if (isRead) FontWeight.Bold else FontWeight.SemiBold,
+                            color = Color.Black
+                        )
+                        Text(
+                            text = notification.time,
+                            fontSize = 11.sp,
+                            color = Color.Gray
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = notification.message,
+                        fontSize = 13.sp,
+                        color = if (isRead) Color.Gray else Color.DarkGray,
+                        lineHeight = 18.sp,
+                        maxLines = 2
+                    )
+                }
             }
         }
     }

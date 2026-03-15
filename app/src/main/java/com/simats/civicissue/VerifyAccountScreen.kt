@@ -1,16 +1,21 @@
 package com.simats.civicissue
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.outlined.Email
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
@@ -78,12 +83,31 @@ fun VerifyAccountScreen(onBack: () -> Unit, onVerify: () -> Unit) {
                     .padding(horizontal = 24.dp),
                 horizontalAlignment = Alignment.Start
             ) {
+                // Mail icon
+                Box(
+                    modifier = Modifier
+                        .size(56.dp)
+                        .clip(CircleShape)
+                        .background(LogoCircleBlue),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Email,
+                        contentDescription = "Email Verification",
+                        tint = PrimaryBlue,
+                        modifier = Modifier.size(28.dp)
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
                 Text(
                     text = "Verify Account",
                     fontSize = 32.sp,
                     fontWeight = FontWeight.Bold,
                     color = Color.Black
                 )
+                Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = if (userEmail.isNotEmpty()) "Enter 6 digit OTP sent to $userEmail" else "Enter 6 digit OTP sent to your email",
                     fontSize = 16.sp,
@@ -138,7 +162,10 @@ fun VerifyAccountScreen(onBack: () -> Unit, onVerify: () -> Unit) {
                             if (timeLeft > 0) {
                                 append("Didn't receive code? ")
                                 withStyle(style = SpanStyle(color = Color.Gray, fontWeight = FontWeight.Normal)) {
-                                    append(resendText)
+                                    append("Resend in ")
+                                }
+                                withStyle(style = SpanStyle(color = PrimaryBlue, fontWeight = FontWeight.Bold)) {
+                                    append("00:${timeLeft.toString().padStart(2, '0')}")
                                 }
                             } else {
                                 append("Didn't receive code? ")
@@ -233,12 +260,24 @@ fun AccountOtpDigitBox(
     onBackspace: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val hasFocus = value.isNotEmpty()
     Surface(
         modifier = modifier
-            .size(width = 45.dp, height = 56.dp),
+            .size(width = 45.dp, height = 56.dp)
+            .then(
+                if (hasFocus) Modifier.border(
+                    width = 1.5.dp,
+                    color = PrimaryBlue,
+                    shape = RoundedCornerShape(12.dp)
+                ) else Modifier.border(
+                    width = 0.5.dp,
+                    color = Color.LightGray.copy(alpha = 0.5f),
+                    shape = RoundedCornerShape(12.dp)
+                )
+            ),
         shape = RoundedCornerShape(12.dp),
-        color = Color.White,
-        shadowElevation = 1.dp
+        color = if (hasFocus) LogoCircleBlue else Color.White,
+        shadowElevation = if (hasFocus) 3.dp else 1.dp
     ) {
         Box(contentAlignment = Alignment.Center) {
             if (value.isEmpty()) {

@@ -1,5 +1,6 @@
  package com.simats.civicissue
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -15,6 +16,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
@@ -45,6 +47,12 @@ fun CitizenDashboardScreen(
     var unreadNotifications by remember { mutableStateOf(0) }
     var isLoading by remember { mutableStateOf(true) }
     var userName by remember { mutableStateOf(TokenManager.getUser()?.full_name ?: "Citizen") }
+
+    val greeting = when (java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)) {
+        in 0..11 -> "Good Morning"
+        in 12..16 -> "Good Afternoon"
+        else -> "Good Evening"
+    }
 
     LaunchedEffect(Unit) {
         val api = RetrofitClient.instance
@@ -84,7 +92,7 @@ fun CitizenDashboardScreen(
                 title = {
                     Column {
                         Text(
-                            text = "Welcome,",
+                            text = "$greeting \uD83D\uDC4B",
                             fontSize = 16.sp,
                             color = Color.DarkGray,
                             fontWeight = FontWeight.Normal
@@ -231,11 +239,17 @@ fun CitizenDashboardScreen(
                         .fillMaxWidth()
                         .clickable { onReportIssue() },
                     shape = RoundedCornerShape(24.dp),
-                    colors = CardDefaults.cardColors(containerColor = PrimaryBlue),
+                    colors = CardDefaults.cardColors(containerColor = Color.Transparent),
                     elevation = CardDefaults.cardElevation(defaultElevation = 10.dp)
                 ) {
                     Column(
-                        modifier = Modifier.padding(24.dp)
+                        modifier = Modifier
+                            .background(
+                                Brush.linearGradient(
+                                    colors = listOf(PrimaryBlue, PrimaryDark)
+                                )
+                            )
+                            .padding(24.dp)
                     ) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -357,34 +371,52 @@ fun CitizenStatCard(
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Column(
-            modifier = Modifier.padding(16.dp),
             horizontalAlignment = Alignment.Start
         ) {
-            Icon(
-                icon,
-                contentDescription = null,
-                tint = color,
-                modifier = Modifier.size(24.dp)
+            // Thin top colored border
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(2.dp)
+                    .background(color, RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp))
             )
-            Spacer(modifier = Modifier.height(12.dp))
-            Text(
-                text = value,
-                fontSize = 24.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color.Black
-            )
-            Text(
-                text = label,
-                fontSize = 12.sp,
-                color = Color.DarkGray,
-                fontWeight = FontWeight.Medium
-            )
+            Column(
+                modifier = Modifier.padding(16.dp),
+                horizontalAlignment = Alignment.Start
+            ) {
+                Icon(
+                    icon,
+                    contentDescription = null,
+                    tint = color,
+                    modifier = Modifier.size(24.dp)
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    text = value,
+                    fontSize = 24.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.Black
+                )
+                Text(
+                    text = label,
+                    fontSize = 12.sp,
+                    color = Color.DarkGray,
+                    fontWeight = FontWeight.Medium
+                )
+            }
         }
     }
 }
 
 @Composable
 fun CitizenReportItem(report: CitizenReport) {
+    val borderColor = when (report.status) {
+        "Resolved", "Completed" -> StatusSuccess
+        "In Progress" -> StatusInfo
+        "Pending", "Unassigned" -> StatusWarning
+        "Assigned" -> StatusInfo
+        else -> TextSecondary
+    }
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
@@ -392,7 +424,20 @@ fun CitizenReportItem(report: CitizenReport) {
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Row(
-            modifier = Modifier.padding(16.dp),
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Colored left border strip
+            Box(
+                modifier = Modifier
+                    .width(3.dp)
+                    .height(72.dp)
+                    .background(borderColor, RoundedCornerShape(topStart = 16.dp, bottomStart = 16.dp))
+            )
+        Row(
+            modifier = Modifier
+                .weight(1f)
+                .padding(16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Surface(
@@ -425,6 +470,7 @@ fun CitizenReportItem(report: CitizenReport) {
             }
             StatusBadge(report.status)
         }
+        }
     }
 }
 
@@ -438,14 +484,15 @@ fun StatusBadge(status: String) {
         else -> TextSecondary
     }
     Surface(
-        color = color.copy(alpha = 0.1f),
-        shape = RoundedCornerShape(8.dp)
+        color = color.copy(alpha = 0.12f),
+        shape = RoundedCornerShape(8.dp),
+        border = BorderStroke(1.dp, color.copy(alpha = 0.3f))
     ) {
         Text(
             text = status,
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-            fontSize = 11.sp,
-            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+            fontSize = 12.sp,
+            fontWeight = FontWeight.ExtraBold,
             color = color
         )
     }

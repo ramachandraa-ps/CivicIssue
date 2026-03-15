@@ -14,6 +14,7 @@ import androidx.compose.material.icons.filled.Error
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -61,6 +62,7 @@ fun SystemLogsScreen(
     ) { paddingValues ->
         var logItems by remember { mutableStateOf<List<SystemLogItem>>(emptyList()) }
         var isLoading by remember { mutableStateOf(true) }
+        var selectedFilter by remember { mutableStateOf("All") }
 
         LaunchedEffect(Unit) {
             try {
@@ -78,21 +80,75 @@ fun SystemLogsScreen(
                 Text("No system logs", color = Color.Gray)
             }
         } else {
-            LazyColumn(
+            Column(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(paddingValues)
-                    .padding(horizontal = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-                contentPadding = PaddingValues(vertical = 16.dp)
             ) {
-                items(logItems) { logItem ->
-                    LogItem(LogData(
-                        level = "INFO",
-                        message = logItem.action,
-                        user = logItem.performedByName ?: logItem.performedBy,
-                        time = logItem.createdAt ?: ""
-                    ))
+                // Filter chip row
+                LazyRow(
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    val filters = listOf("All", "Info", "Warning", "Error")
+                    val filterColors = mapOf(
+                        "All" to PrimaryBlue,
+                        "Info" to Color(0xFF2196F3),
+                        "Warning" to Color(0xFFFFA000),
+                        "Error" to Color(0xFFD32F2F)
+                    )
+                    items(filters.size) { index ->
+                        val filter = filters[index]
+                        val isSelected = selectedFilter == filter
+                        val chipColor = filterColors[filter] ?: PrimaryBlue
+                        FilterChip(
+                            selected = isSelected,
+                            onClick = { selectedFilter = filter },
+                            label = {
+                                Text(
+                                    filter,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                    fontSize = 13.sp
+                                )
+                            },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = chipColor.copy(alpha = 0.15f),
+                                selectedLabelColor = chipColor,
+                                containerColor = Color.White,
+                                labelColor = Color.Gray
+                            ),
+                            border = FilterChipDefaults.filterChipBorder(
+                                borderColor = Color.LightGray.copy(alpha = 0.5f),
+                                selectedBorderColor = chipColor.copy(alpha = 0.5f),
+                                enabled = true,
+                                selected = isSelected
+                            ),
+                            shape = RoundedCornerShape(20.dp)
+                        )
+                    }
+                }
+
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    contentPadding = PaddingValues(vertical = 8.dp)
+                ) {
+                    val filteredLogs = logItems.filter { logItem ->
+                        when (selectedFilter) {
+                            "All" -> true
+                            else -> "INFO".equals(selectedFilter, ignoreCase = true)
+                        }
+                    }
+                    items(filteredLogs) { logItem ->
+                        LogItem(LogData(
+                            level = "INFO",
+                            message = logItem.action,
+                            user = logItem.performedByName ?: logItem.performedBy,
+                            time = logItem.createdAt ?: ""
+                        ))
+                    }
                 }
             }
         }
@@ -107,7 +163,7 @@ fun LogItem(log: LogData) {
         "ERROR" -> Color(0xFFD32F2F)
         else -> Color.Gray
     }
-    
+
     val icon = when (log.level) {
         "INFO" -> Icons.Default.Info
         "WARNING" -> Icons.Default.Warning
@@ -121,48 +177,63 @@ fun LogItem(log: LogData) {
         colors = CardDefaults.cardColors(containerColor = Color.White),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
-        Row(
-            modifier = Modifier.padding(16.dp),
-            verticalAlignment = Alignment.Top
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = statusColor,
-                modifier = Modifier.size(20.dp)
+        Row(modifier = Modifier.height(IntrinsicSize.Min)) {
+            // Left border colored by log level
+            Box(
+                modifier = Modifier
+                    .width(3.dp)
+                    .fillMaxHeight()
+                    .background(statusColor, RoundedCornerShape(topStart = 12.dp, bottomStart = 12.dp))
             )
-            Spacer(modifier = Modifier.width(16.dp))
-            Column {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
+            Row(
+                modifier = Modifier.padding(16.dp),
+                verticalAlignment = Alignment.Top
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = statusColor,
+                    modifier = Modifier.size(20.dp)
+                )
+                Spacer(modifier = Modifier.width(16.dp))
+                Column {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Surface(
+                            color = statusColor.copy(alpha = 0.1f),
+                            shape = RoundedCornerShape(4.dp)
+                        ) {
+                            Text(
+                                text = log.level,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = statusColor,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                        Text(
+                            text = log.time,
+                            fontSize = 12.sp,
+                            color = Color.Gray
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(6.dp))
                     Text(
-                        text = log.level,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = statusColor
+                        text = log.message,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = Color.Black
                     )
+                    Spacer(modifier = Modifier.height(2.dp))
                     Text(
-                        text = log.time,
-                        fontSize = 12.sp,
+                        text = log.user,
+                        fontSize = 13.sp,
                         color = Color.Gray
                     )
                 }
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = log.message,
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = Color.Black
-                )
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = log.user,
-                    fontSize = 13.sp,
-                    color = Color.Gray
-                )
             }
         }
     }

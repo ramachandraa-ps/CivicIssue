@@ -15,13 +15,16 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.border
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.simats.civicissue.ui.theme.PrimaryBlue
+import com.simats.civicissue.ui.theme.PrimaryDark
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -174,10 +177,18 @@ fun CitizenProfileScreen(
                 .padding(20.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Profile Header
+            // Profile Header with gradient ring
             Box(
                 modifier = Modifier
-                    .size(100.dp)
+                    .size(108.dp)
+                    .border(
+                        width = 3.dp,
+                        brush = Brush.linearGradient(
+                            colors = listOf(PrimaryBlue, Color(0xFF93B5FF))
+                        ),
+                        shape = CircleShape
+                    )
+                    .padding(4.dp)
                     .clip(CircleShape)
                     .background(PrimaryBlue.copy(alpha = 0.1f)),
                 contentAlignment = Alignment.Center
@@ -221,10 +232,19 @@ fun CitizenProfileScreen(
 
             Spacer(modifier = Modifier.height(32.dp))
 
-            // Info Fields
-            ProfileInfoItem(label = "Full Name", value = profile?.full_name ?: "--", icon = Icons.Default.Person)
-            ProfileInfoItem(label = "Email Address", value = profile?.email ?: "--", icon = Icons.Default.Email)
-            ProfileInfoItem(label = "Phone Number", value = "${profile?.country_code ?: ""} ${profile?.phone_number ?: "--"}".trim(), icon = Icons.Default.Phone)
+            // Info Fields in a bordered card
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = Color.White),
+                border = androidx.compose.foundation.BorderStroke(1.dp, Color.LightGray.copy(alpha = 0.3f))
+            ) {
+                Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                    ProfileInfoItem(label = "Full Name", value = profile?.full_name ?: "--", icon = Icons.Default.Person)
+                    ProfileInfoItem(label = "Email Address", value = profile?.email ?: "--", icon = Icons.Default.Email)
+                    ProfileInfoItem(label = "Phone Number", value = "${profile?.country_code ?: ""} ${profile?.phone_number ?: "--"}".trim(), icon = Icons.Default.Phone)
+                }
+            }
 
             Spacer(modifier = Modifier.height(24.dp))
 

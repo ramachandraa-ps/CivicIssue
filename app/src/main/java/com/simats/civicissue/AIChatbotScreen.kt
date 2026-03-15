@@ -27,6 +27,12 @@ import androidx.compose.ui.unit.sp
 import com.simats.civicissue.ui.theme.PrimaryBlue
 import com.simats.civicissue.ui.theme.BackgroundBlue
 import android.util.Log
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -130,6 +136,40 @@ fun AIChatbotScreen(
                 items(messages) { message ->
                     ChatBubble(message)
                 }
+                if (isSending) {
+                    item {
+                        Row(
+                            verticalAlignment = Alignment.Bottom,
+                            modifier = Modifier.padding(start = 4.dp)
+                        ) {
+                            // Bot avatar for typing indicator
+                            Surface(
+                                modifier = Modifier.size(28.dp),
+                                shape = CircleShape,
+                                color = PrimaryBlue.copy(alpha = 0.1f)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        imageVector = Icons.Default.SmartToy,
+                                        contentDescription = null,
+                                        tint = PrimaryBlue,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Surface(
+                                color = Color.White,
+                                shape = RoundedCornerShape(16.dp, 16.dp, 16.dp, 4.dp),
+                                tonalElevation = 1.dp
+                            ) {
+                                Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+                                    TypingIndicator()
+                                }
+                            }
+                        }
+                    }
+                }
             }
 
             // Bottom Section
@@ -231,39 +271,72 @@ fun ChatBubble(message: ChatMessage) {
         modifier = Modifier.fillMaxWidth(),
         horizontalAlignment = if (message.isUser) Alignment.End else Alignment.Start
     ) {
-        Surface(
-            color = if (message.isUser) PrimaryBlue else Color.White,
-            shape = RoundedCornerShape(
-                topStart = 16.dp,
-                topEnd = 16.dp,
-                bottomStart = if (message.isUser) 16.dp else 4.dp,
-                bottomEnd = if (message.isUser) 4.dp else 16.dp
-            ),
-            tonalElevation = 1.dp,
-            shadowElevation = 1.dp
-        ) {
-            val textColor = if (message.isUser) Color.White else Color.Black
-            if (message.isUser) {
+        if (message.isUser) {
+            // User message: right-aligned with subtle shadow
+            Surface(
+                color = PrimaryBlue,
+                shape = RoundedCornerShape(
+                    topStart = 16.dp,
+                    topEnd = 16.dp,
+                    bottomStart = 16.dp,
+                    bottomEnd = 4.dp
+                ),
+                tonalElevation = 1.dp,
+                shadowElevation = 3.dp
+            ) {
                 Text(
                     text = message.text,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
-                    color = textColor,
+                    color = Color.White,
                     fontSize = 15.sp
                 )
-            } else {
-                Text(
-                    text = formatMarkdownText(message.text, textColor),
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
-                    fontSize = 15.sp,
-                    lineHeight = 22.sp
-                )
+            }
+        } else {
+            // Bot message: with small bot avatar icon on the left
+            Row(
+                verticalAlignment = Alignment.Bottom,
+                modifier = Modifier.padding(end = 48.dp)
+            ) {
+                Surface(
+                    modifier = Modifier.size(28.dp),
+                    shape = CircleShape,
+                    color = PrimaryBlue.copy(alpha = 0.1f)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = Icons.Default.SmartToy,
+                            contentDescription = null,
+                            tint = PrimaryBlue,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.width(8.dp))
+                Surface(
+                    color = Color.White,
+                    shape = RoundedCornerShape(
+                        topStart = 16.dp,
+                        topEnd = 16.dp,
+                        bottomStart = 4.dp,
+                        bottomEnd = 16.dp
+                    ),
+                    tonalElevation = 1.dp,
+                    shadowElevation = 1.dp
+                ) {
+                    Text(
+                        text = formatMarkdownText(message.text, Color.Black),
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                        fontSize = 15.sp,
+                        lineHeight = 22.sp
+                    )
+                }
             }
         }
         Text(
             text = message.timestamp,
             fontSize = 10.sp,
             color = Color.Gray,
-            modifier = Modifier.padding(top = 4.dp, start = 4.dp, end = 4.dp)
+            modifier = Modifier.padding(top = 4.dp, start = if (message.isUser) 4.dp else 40.dp, end = 4.dp)
         )
     }
 }
@@ -311,16 +384,43 @@ fun SuggestionChip(label: String, icon: ImageVector, onClick: () -> Unit) {
     Surface(
         onClick = onClick,
         shape = RoundedCornerShape(20.dp),
-        border = androidx.compose.foundation.BorderStroke(1.dp, Color.LightGray.copy(alpha = 0.5f)),
-        color = Color.White
+        border = BorderStroke(1.dp, PrimaryBlue.copy(alpha = 0.3f)),
+        color = PrimaryBlue.copy(alpha = 0.04f)
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(imageVector = icon, contentDescription = null, modifier = Modifier.size(16.dp), tint = PrimaryBlue)
             Spacer(modifier = Modifier.width(6.dp))
-            Text(label, fontSize = 12.sp, fontWeight = FontWeight.Medium, color = Color.Black)
+            Text(label, fontSize = 12.sp, fontWeight = FontWeight.Medium, color = PrimaryBlue)
+        }
+    }
+}
+
+@Composable
+fun TypingIndicator() {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+    ) {
+        repeat(3) { index ->
+            val infiniteTransition = rememberInfiniteTransition(label = "dot$index")
+            val offsetY by infiniteTransition.animateFloat(
+                initialValue = 0f,
+                targetValue = -8f,
+                animationSpec = infiniteRepeatable(
+                    animation = tween(400, delayMillis = index * 150),
+                    repeatMode = RepeatMode.Reverse
+                ), label = "dot$index"
+            )
+            Box(
+                modifier = Modifier
+                    .size(8.dp)
+                    .offset(y = offsetY.dp)
+                    .background(Color.Gray, CircleShape)
+            )
         }
     }
 }

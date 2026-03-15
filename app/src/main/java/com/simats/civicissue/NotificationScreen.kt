@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.simats.civicissue.ui.theme.CivicIssueTheme
 import com.simats.civicissue.ui.theme.PrimaryBlue
+import com.simats.civicissue.ui.theme.TextSecondary
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -63,15 +64,26 @@ fun NotificationScreen(
                     }
                 },
                 actions = {
-                    TextButton(onClick = {
-                        scope.launch {
-                            try {
-                                RetrofitClient.instance.markAllNotificationsRead()
-                                notifications = notifications.map { it.copy(isRead = true) }
-                            } catch (_: Exception) { }
-                        }
-                    }) {
-                        Text("Mark all read", color = PrimaryBlue, fontSize = 12.sp)
+                    Surface(
+                        onClick = {
+                            scope.launch {
+                                try {
+                                    RetrofitClient.instance.markAllNotificationsRead()
+                                    notifications = notifications.map { it.copy(isRead = true) }
+                                } catch (_: Exception) { }
+                            }
+                        },
+                        shape = RoundedCornerShape(20.dp),
+                        color = PrimaryBlue.copy(alpha = 0.1f),
+                        modifier = Modifier.padding(end = 12.dp)
+                    ) {
+                        Text(
+                            "Mark all read",
+                            color = PrimaryBlue,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                        )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -151,56 +163,68 @@ fun AdminNotificationItem(
         colors = CardDefaults.cardColors(containerColor = if (isRead) Color.White else Color(0xFFE3F2FD)),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
-        Row(
-            modifier = Modifier
-                .padding(16.dp)
-                .fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // Icon Container
-            Box(
-                modifier = Modifier
-                    .size(48.dp)
-                    .clip(CircleShape)
-                    .background(notification.iconBgColor.copy(alpha = 0.1f)),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = notification.icon,
-                    contentDescription = null,
-                    tint = notification.iconBgColor,
-                    modifier = Modifier.size(24.dp)
+        Row(modifier = Modifier.height(IntrinsicSize.Min)) {
+            // Left accent border for unread items
+            if (!isRead) {
+                Box(
+                    modifier = Modifier
+                        .width(3.dp)
+                        .fillMaxHeight()
+                        .background(PrimaryBlue, RoundedCornerShape(topStart = 16.dp, bottomStart = 16.dp))
                 )
             }
-
-            Spacer(modifier = Modifier.width(16.dp))
-
-            // Text Content
-            Column(modifier = Modifier.weight(1f)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+            Row(
+                modifier = Modifier
+                    .padding(16.dp)
+                    .fillMaxWidth()
+                    .weight(1f),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Icon Container
+                Box(
+                    modifier = Modifier
+                        .size(48.dp)
+                        .clip(CircleShape)
+                        .background(notification.iconBgColor.copy(alpha = 0.1f)),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Text(
-                        text = notification.title,
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.Black
-                    )
-                    Text(
-                        text = notification.time,
-                        fontSize = 12.sp,
-                        color = Color.Gray
+                    Icon(
+                        imageVector = notification.icon,
+                        contentDescription = null,
+                        tint = notification.iconBgColor,
+                        modifier = Modifier.size(24.dp)
                     )
                 }
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = notification.description,
-                    fontSize = 14.sp,
-                    color = Color.Gray,
-                    lineHeight = 20.sp
-                )
+
+                Spacer(modifier = Modifier.width(16.dp))
+
+                // Text Content
+                Column(modifier = Modifier.weight(1f)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = notification.title,
+                            fontSize = 16.sp,
+                            fontWeight = if (isRead) FontWeight.Medium else FontWeight.Bold,
+                            color = if (isRead) TextSecondary else Color.Black
+                        )
+                        Text(
+                            text = notification.time,
+                            fontSize = 12.sp,
+                            color = if (isRead) TextSecondary else Color.Gray
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = notification.description,
+                        fontSize = 14.sp,
+                        color = if (isRead) TextSecondary else Color.Gray,
+                        lineHeight = 20.sp
+                    )
+                }
             }
         }
     }

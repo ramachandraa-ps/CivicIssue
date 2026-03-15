@@ -15,6 +15,9 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
@@ -180,22 +183,34 @@ fun AnalyticsMetricCard(
     Card(
         modifier = modifier,
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+        colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Surface(
-                modifier = Modifier.size(36.dp),
-                shape = RoundedCornerShape(8.dp),
-                color = color.copy(alpha = 0.1f)
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(20.dp))
+        Box(
+            modifier = Modifier
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            color.copy(alpha = 0.05f),
+                            Color.White
+                        )
+                    )
+                )
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Surface(
+                    modifier = Modifier.size(40.dp),
+                    shape = RoundedCornerShape(10.dp),
+                    color = color.copy(alpha = 0.12f)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(22.dp))
+                    }
                 }
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(text = value, fontSize = 26.sp, fontWeight = FontWeight.ExtraBold, color = Color.Black)
+                Text(text = label, fontSize = 13.sp, color = Color.Gray, fontWeight = FontWeight.Medium)
             }
-            Spacer(modifier = Modifier.height(12.dp))
-            Text(text = value, fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Color.Black)
-            Text(text = label, fontSize = 12.sp, color = Color.Gray)
         }
     }
 }
@@ -221,24 +236,29 @@ fun AnalyticsSectionCard(
 
 @Composable
 fun CategoryRow(name: String, percentage: Float, color: Color) {
+    val animatedProgress by animateFloatAsState(
+        targetValue = percentage,
+        animationSpec = tween(durationMillis = 800),
+        label = "progressAnim"
+    )
     Column(modifier = Modifier.padding(vertical = 8.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(text = name, fontSize = 14.sp, color = Color.Black)
+            Text(text = name, fontSize = 14.sp, fontWeight = FontWeight.Medium, color = Color.Black)
             Text(text = "${(percentage * 100).toInt()}%", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = color)
         }
         Spacer(modifier = Modifier.height(8.dp))
         LinearProgressIndicator(
-            progress = { percentage },
+            progress = { animatedProgress },
             modifier = Modifier
                 .fillMaxWidth()
                 .height(8.dp)
-                .clip(CircleShape),
+                .clip(RoundedCornerShape(4.dp)),
             color = color,
-            trackColor = Color.LightGray.copy(alpha = 0.2f),
+            trackColor = color.copy(alpha = 0.1f),
             strokeCap = androidx.compose.ui.graphics.StrokeCap.Round
         )
     }

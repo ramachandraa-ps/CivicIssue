@@ -23,6 +23,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
@@ -309,6 +310,8 @@ fun ReportIssueScreen(
                 Spacer(modifier = Modifier.height(16.dp))
 
                 // Photo Upload Area
+                ReportLabel("Photo Evidence", Icons.Default.CameraAlt)
+                Spacer(modifier = Modifier.height(8.dp))
                 PhotoUploadSection(
                     capturedBitmap = capturedBitmap,
                     selectedImageUri = selectedImageUri,
@@ -319,7 +322,7 @@ fun ReportIssueScreen(
                 Spacer(modifier = Modifier.height(24.dp))
 
                 // Location Input
-                ReportLabel("Location")
+                ReportLabel("Location", Icons.Default.LocationOn)
                 Spacer(modifier = Modifier.height(8.dp))
                 OutlinedTextField(
                     value = location,
@@ -460,7 +463,7 @@ fun ReportIssueScreen(
                 Spacer(modifier = Modifier.height(24.dp))
 
                 // Category Dropdown
-                ReportLabel("Category")
+                ReportLabel("Category", Icons.Default.Category)
                 Spacer(modifier = Modifier.height(8.dp))
                 ExposedDropdownMenuBox(
                     expanded = categoryExpanded,
@@ -498,8 +501,27 @@ fun ReportIssueScreen(
                         modifier = Modifier.background(Color.White)
                     ) {
                         categories.forEach { selectionOption ->
+                            val dotColor = when (selectionOption) {
+                                "Pothole" -> StatusError
+                                "Street Light" -> StatusWarning
+                                "Waste Collection" -> StatusSuccess
+                                "Water Leakage" -> PrimaryBlue
+                                "Drainage" -> Color(0xFF8B5CF6)
+                                else -> Color.Gray
+                            }
                             DropdownMenuItem(
-                                text = { Text(selectionOption, color = Color.Black) },
+                                text = {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(8.dp)
+                                                .clip(CircleShape)
+                                                .background(dotColor)
+                                        )
+                                        Spacer(modifier = Modifier.width(10.dp))
+                                        Text(selectionOption, color = Color.Black)
+                                    }
+                                },
                                 onClick = {
                                     selectedCategory = selectionOption
                                     categoryExpanded = false
@@ -513,7 +535,7 @@ fun ReportIssueScreen(
                 Spacer(modifier = Modifier.height(24.dp))
 
                 // Description Input
-                ReportLabel("Description")
+                ReportLabel("Description", Icons.Default.Description)
                 Spacer(modifier = Modifier.height(8.dp))
                 OutlinedTextField(
                     value = description,
@@ -664,8 +686,22 @@ fun ReportIssueScreen(
         val isHighSeverity = detectedSeverity.equals("HIGH", true) || detectedSeverity.equals("CRITICAL", true)
         AlertDialog(
             onDismissRequest = { showSeverityPopup = false },
-            icon = { Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = Color(0xFF6200EE)) },
-            title = { Text("AI Insight", color = Color.Black) },
+            icon = {
+                Box(
+                    modifier = Modifier
+                        .size(48.dp)
+                        .clip(CircleShape)
+                        .background(
+                            androidx.compose.ui.graphics.Brush.linearGradient(
+                                colors = listOf(Color(0xFF7C3AED), Color(0xFFA78BFA))
+                            )
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = Color.White, modifier = Modifier.size(24.dp))
+                }
+            },
+            title = { Text("AI Insight", color = Color.Black, fontWeight = FontWeight.Bold) },
             text = {
                 Column {
                     Text("Based on the photo, AI has detected a potential issue.", color = Color.Black)
@@ -723,8 +759,8 @@ fun ReportIssueScreen(
     // Map Picker Dialog
     if (showMapPicker) {
         MapLocationPicker(
-            initialLat = if (latitude != 0.0) latitude else 17.385,
-            initialLng = if (longitude != 0.0) longitude else 78.4867,
+            initialLat = latitude,
+            initialLng = longitude,
             onLocationSelected = { lat, lng, address ->
                 latitude = lat
                 longitude = lng
@@ -855,16 +891,35 @@ fun PhotoUploadSection(
     onGalleryClick: () -> Unit
 ) {
     var showOptions by remember { mutableStateOf(false) }
+    val hasImage = capturedBitmap != null || selectedImageUri != null
+
+    val dashedBorderModifier = if (!hasImage) {
+        Modifier.drawBehind {
+            val stroke = androidx.compose.ui.graphics.drawscope.Stroke(
+                width = 2.dp.toPx(),
+                pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(
+                    floatArrayOf(12.dp.toPx(), 8.dp.toPx()), 0f
+                )
+            )
+            drawRoundRect(
+                color = PrimaryBlue.copy(alpha = 0.4f),
+                style = stroke,
+                cornerRadius = androidx.compose.ui.geometry.CornerRadius(16.dp.toPx())
+            )
+        }
+    } else {
+        Modifier.border(
+            width = 1.dp,
+            color = PrimaryBlue.copy(alpha = 0.3f),
+            shape = RoundedCornerShape(16.dp)
+        )
+    }
 
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .height(200.dp)
-            .border(
-                width = 1.dp,
-                color = PrimaryBlue.copy(alpha = 0.3f),
-                shape = RoundedCornerShape(16.dp)
-            )
+            .then(dashedBorderModifier)
             .clip(RoundedCornerShape(16.dp))
             .background(PrimaryBlue.copy(alpha = 0.02f))
             .clickable { showOptions = true },
@@ -878,8 +933,6 @@ fun PhotoUploadSection(
                 contentScale = ContentScale.Crop
             )
         } else if (selectedImageUri != null) {
-            // In a real app, you'd use Coil or Glide here to load the URI
-            // Since I can't add external libs easily in this snippet without Coil, I'll show a "Photo Selected" text
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Icon(Icons.Default.Photo, contentDescription = null, tint = PrimaryBlue, modifier = Modifier.size(48.dp))
                 Text("Photo Selected from Gallery", color = PrimaryBlue, fontWeight = FontWeight.Bold)
@@ -944,13 +997,24 @@ fun PhotoUploadSection(
 }
 
 @Composable
-fun ReportLabel(text: String) {
-    Text(
-        text = text,
-        fontSize = 15.sp,
-        fontWeight = FontWeight.Bold,
-        color = Color.Black
-    )
+fun ReportLabel(text: String, icon: androidx.compose.ui.graphics.vector.ImageVector? = null) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        if (icon != null) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = PrimaryBlue,
+                modifier = Modifier.size(18.dp)
+            )
+            Spacer(modifier = Modifier.width(6.dp))
+        }
+        Text(
+            text = text,
+            fontSize = 15.sp,
+            fontWeight = FontWeight.Bold,
+            color = Color.Black
+        )
+    }
 }
 
 @Preview(showBackground = true)

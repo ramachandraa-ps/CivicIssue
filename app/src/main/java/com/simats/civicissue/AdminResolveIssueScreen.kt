@@ -28,8 +28,13 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
@@ -139,13 +144,30 @@ fun AdminResolveIssueScreen(
                 Column {
                     Text("Upload Completion Proof", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = Color.Black)
                     Spacer(Modifier.height(8.dp))
+                    val dashedStroke = Stroke(
+                        width = 3f,
+                        pathEffect = PathEffect.dashPathEffect(floatArrayOf(20f, 10f), 0f)
+                    )
+                    val dashedColor = PrimaryBlue.copy(alpha = 0.4f)
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(200.dp)
                             .clip(RoundedCornerShape(12.dp))
-                            .background(Color.White)
-                            .border(1.dp, Color.LightGray, RoundedCornerShape(12.dp))
+                            .background(if (capturedBitmap != null) Color.White else Color(0xFFF8FAFF))
+                            .then(
+                                if (capturedBitmap == null) {
+                                    Modifier.drawBehind {
+                                        drawRoundRect(
+                                            color = dashedColor,
+                                            style = dashedStroke,
+                                            cornerRadius = CornerRadius(12.dp.toPx())
+                                        )
+                                    }
+                                } else {
+                                    Modifier.border(1.dp, Color.LightGray, RoundedCornerShape(12.dp))
+                                }
+                            )
                             .clickable { cameraLauncher.launch() },
                         contentAlignment = Alignment.Center
                     ) {
@@ -199,6 +221,8 @@ fun AdminResolveIssueScreen(
                         }
                     }
                 }
+
+                HorizontalDivider(color = Color.LightGray.copy(alpha = 0.4f), thickness = 1.dp)
 
                 // Location Section
                 Column {
@@ -289,6 +313,8 @@ fun AdminResolveIssueScreen(
                     }
                 }
 
+                HorizontalDivider(color = Color.LightGray.copy(alpha = 0.4f), thickness = 1.dp)
+
                 // Completion Note
                 Column {
                     Text("Completion Remarks", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = Color.Black)
@@ -312,7 +338,11 @@ fun AdminResolveIssueScreen(
 
                 Spacer(Modifier.weight(1f))
 
+                // Section divider
+                HorizontalDivider(color = Color.LightGray.copy(alpha = 0.4f), thickness = 1.dp)
+
                 // Action Button
+                val submitEnabled = completionNote.isNotBlank() && !isSubmitting
                 Button(
                     onClick = {
                         isSubmitting = true
@@ -334,10 +364,25 @@ fun AdminResolveIssueScreen(
                         .fillMaxWidth()
                         .height(56.dp),
                     shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50)),
-                    enabled = completionNote.isNotBlank() && !isSubmitting
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
+                    contentPadding = PaddingValues(0.dp),
+                    enabled = submitEnabled
                 ) {
-                    Text("Submit", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(
+                                if (submitEnabled) Brush.horizontalGradient(
+                                    colors = listOf(Color(0xFF4CAF50), Color(0xFF2E7D32))
+                                ) else Brush.horizontalGradient(
+                                    colors = listOf(Color.Gray, Color.Gray)
+                                ),
+                                RoundedCornerShape(12.dp)
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("Submit Resolution", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color.White)
+                    }
                 }
             }
         }
@@ -346,8 +391,8 @@ fun AdminResolveIssueScreen(
     // Map Picker Dialog
     if (showMapPicker) {
         MapLocationPicker(
-            initialLat = if (latitude != 0.0) latitude else 17.385,
-            initialLng = if (longitude != 0.0) longitude else 78.4867,
+            initialLat = latitude,
+            initialLng = longitude,
             onLocationSelected = { lat, lng, address ->
                 latitude = lat
                 longitude = lng

@@ -21,6 +21,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.simats.civicissue.ui.theme.PrimaryBlue
+import com.simats.civicissue.ui.theme.StatusSuccess
+import com.simats.civicissue.ui.theme.StatusWarning
+import com.simats.civicissue.ui.theme.StatusInfo
+import com.simats.civicissue.ui.theme.TextSecondary
 import android.util.Log
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -154,8 +158,41 @@ fun CitizenIssuesScreen(
                 }
             } else if (complaints.isEmpty()) {
                 item {
-                    Box(modifier = Modifier.fillParentMaxSize(), contentAlignment = Alignment.Center) {
-                        Text("No complaints found.", color = Color.DarkGray)
+                    Box(
+                        modifier = Modifier
+                            .fillParentMaxSize()
+                            .padding(32.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Surface(
+                                modifier = Modifier.size(80.dp),
+                                shape = CircleShape,
+                                color = PrimaryBlue.copy(alpha = 0.08f)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        Icons.Default.Inbox,
+                                        contentDescription = null,
+                                        tint = PrimaryBlue.copy(alpha = 0.5f),
+                                        modifier = Modifier.size(40.dp)
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Text(
+                                "No Complaints Yet",
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color.Black
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                "Your reported issues will appear here",
+                                fontSize = 14.sp,
+                                color = Color.Gray
+                            )
+                        }
                     }
                 }
             } else {
@@ -174,6 +211,14 @@ fun CitizenIssuesScreen(
 fun ComplaintHistoryCard(complaint: CitizenComplaintDetailed) {
     var isExpanded by remember { mutableStateOf(false) }
 
+    val statusColor = when (complaint.status) {
+        "Resolved", "Completed" -> StatusSuccess
+        "In Progress" -> StatusInfo
+        "Pending", "Unassigned" -> StatusWarning
+        "Assigned" -> StatusInfo
+        else -> TextSecondary
+    }
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -182,7 +227,15 @@ fun ComplaintHistoryCard(complaint: CitizenComplaintDetailed) {
         colors = CardDefaults.cardColors(containerColor = Color.White),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
+        Row {
+            // Colored left border strip based on status
+            Box(
+                modifier = Modifier
+                    .width(3.dp)
+                    .defaultMinSize(minHeight = 100.dp)
+                    .background(statusColor, RoundedCornerShape(topStart = 16.dp, bottomStart = 16.dp))
+            )
+        Column(modifier = Modifier.weight(1f).padding(16.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -268,6 +321,7 @@ fun ComplaintHistoryCard(complaint: CitizenComplaintDetailed) {
                     modifier = Modifier.align(Alignment.End)
                 )
             }
+        }
         }
     }
 }

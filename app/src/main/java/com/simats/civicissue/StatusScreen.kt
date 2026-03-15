@@ -126,8 +126,9 @@ fun StatusScreen(
 @Composable
 fun StatusMetricItem(label: String, value: String, color: Color) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(text = value, fontSize = 20.sp, fontWeight = FontWeight.Bold, color = color)
-        Text(text = label, fontSize = 12.sp, color = Color.Gray)
+        Text(text = value, fontSize = 24.sp, fontWeight = FontWeight.ExtraBold, color = color)
+        Spacer(modifier = Modifier.height(2.dp))
+        Text(text = label, fontSize = 12.sp, fontWeight = FontWeight.Medium, color = Color.Gray)
     }
 }
 
@@ -142,16 +143,16 @@ fun StatusDetailCard(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
     ) {
         Row(
             modifier = Modifier.padding(16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Surface(
-                modifier = Modifier.size(40.dp),
-                shape = RoundedCornerShape(8.dp),
-                color = color.copy(alpha = 0.1f)
+                modifier = Modifier.size(44.dp),
+                shape = CircleShape,
+                color = color.copy(alpha = 0.12f)
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(24.dp))
@@ -159,14 +160,15 @@ fun StatusDetailCard(
             }
             Spacer(modifier = Modifier.width(16.dp))
             Column(modifier = Modifier.weight(1f)) {
-                Text(text = label, fontSize = 14.sp, fontWeight = FontWeight.Medium, color = Color.Black)
+                Text(text = label, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = Color.Black)
+                Spacer(modifier = Modifier.height(2.dp))
                 Text(text = "$count Reports", fontSize = 12.sp, color = Color.Gray)
             }
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.ArrowBack, // Using as a sort of "view" indicator if needed, but rotated
-                contentDescription = null,
-                tint = Color.LightGray,
-                modifier = Modifier.size(16.dp)
+            Text(
+                text = count,
+                fontSize = 24.sp,
+                fontWeight = FontWeight.Bold,
+                color = color
             )
         }
     }

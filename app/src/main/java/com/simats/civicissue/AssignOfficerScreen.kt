@@ -16,12 +16,15 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.simats.civicissue.ui.theme.PrimaryBlue
+import com.simats.civicissue.ui.theme.StatusSuccess
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -76,11 +79,16 @@ fun AssignOfficerScreen(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(PrimaryBlue)
-                    .padding(16.dp)
+                    .background(
+                        Brush.horizontalGradient(
+                            colors = listOf(PrimaryBlue, Color(0xFF1E40AF))
+                        )
+                    )
+                    .padding(20.dp)
             ) {
                 Column {
                     Text("Assigning for Ticket:", color = Color.White.copy(alpha = 0.7f), fontSize = 12.sp)
+                    Spacer(modifier = Modifier.height(4.dp))
                     Text(complaintId, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
                 }
             }
@@ -142,40 +150,74 @@ fun AssignOfficerScreen(
 
 @Composable
 fun OfficerItem(officer: Officer, onClick: () -> Unit) {
+    val isAvailable = officer.workloadCount <= 3
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onClick() },
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+        elevation = CardDefaults.cardElevation(
+            defaultElevation = 1.dp,
+            pressedElevation = 4.dp
+        ),
+        border = BorderStroke(1.dp, Color.LightGray.copy(alpha = 0.3f))
     ) {
         Row(
             modifier = Modifier.padding(16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Box(
-                modifier = Modifier
-                    .size(48.dp)
-                    .clip(CircleShape)
-                    .background(PrimaryBlue.copy(alpha = 0.1f)),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    (officer.fullName.ifEmpty { officer.name }).take(1),
-                    fontWeight = FontWeight.Bold,
-                    color = PrimaryBlue,
-                    fontSize = 20.sp
+            Box(contentAlignment = Alignment.Center) {
+                Box(
+                    modifier = Modifier
+                        .size(48.dp)
+                        .clip(CircleShape)
+                        .background(PrimaryBlue.copy(alpha = 0.1f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        (officer.fullName.ifEmpty { officer.name }).take(1),
+                        fontWeight = FontWeight.Bold,
+                        color = PrimaryBlue,
+                        fontSize = 20.sp
+                    )
+                }
+                // Availability indicator dot
+                Box(
+                    modifier = Modifier
+                        .size(14.dp)
+                        .align(Alignment.BottomEnd)
+                        .clip(CircleShape)
+                        .background(Color.White)
+                        .padding(2.dp)
+                        .clip(CircleShape)
+                        .background(if (isAvailable) StatusSuccess else Color.Gray)
                 )
             }
             Spacer(modifier = Modifier.width(16.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(officer.fullName.ifEmpty { officer.name }, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                 Text(officer.department ?: "No department", color = Color.Gray, fontSize = 12.sp)
-            }
-            Column(horizontalAlignment = Alignment.End) {
-                Text("Workload", fontSize = 10.sp, color = Color.Gray)
-                Text("${officer.workloadCount} Active", fontWeight = FontWeight.Bold, color = if (officer.workloadCount > 3) Color.Red else Color(0xFF4CAF50))
+                Spacer(modifier = Modifier.height(6.dp))
+                // Workload progress bar
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    LinearProgressIndicator(
+                        progress = { (officer.workloadCount.toFloat() / 6f).coerceIn(0f, 1f) },
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(4.dp)
+                            .clip(RoundedCornerShape(2.dp)),
+                        color = if (isAvailable) StatusSuccess else Color.Red,
+                        trackColor = Color.LightGray.copy(alpha = 0.3f),
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        "${officer.workloadCount} Active",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = if (isAvailable) StatusSuccess else Color.Red
+                    )
+                }
             }
         }
     }

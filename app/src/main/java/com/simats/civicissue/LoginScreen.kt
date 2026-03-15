@@ -1,5 +1,6 @@
 package com.simats.civicissue
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -125,7 +126,8 @@ fun LoginScreen(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(24.dp),
                 colors = CardDefaults.cardColors(containerColor = Color.White),
-                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
+                border = BorderStroke(0.5.dp, Color.LightGray.copy(alpha = 0.3f))
             ) {
                 Column(
                     modifier = Modifier.padding(24.dp)
@@ -261,6 +263,30 @@ fun LoginScreen(
             }
 
             Spacer(modifier = Modifier.weight(1f))
+
+            // Divider
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                HorizontalDivider(
+                    modifier = Modifier.weight(1f),
+                    thickness = 0.5.dp,
+                    color = Color.LightGray.copy(alpha = 0.5f)
+                )
+                Text(
+                    text = "  Or  ",
+                    fontSize = 14.sp,
+                    color = Color.Gray
+                )
+                HorizontalDivider(
+                    modifier = Modifier.weight(1f),
+                    thickness = 0.5.dp,
+                    color = Color.LightGray.copy(alpha = 0.5f)
+                )
+            }
 
             // Footer
             Text(

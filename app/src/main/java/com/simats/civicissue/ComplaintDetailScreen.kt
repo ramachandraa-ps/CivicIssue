@@ -18,8 +18,10 @@ import kotlinx.coroutines.CoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.animation.core.*
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -189,14 +191,22 @@ fun ComplaintDetailScreen(
             item {
                 Card(
                     shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFFF3E5F5)),
+                    colors = CardDefaults.cardColors(containerColor = Color.Transparent),
                     elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
                 ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
+                    Column(
+                        modifier = Modifier
+                            .background(
+                                Brush.linearGradient(
+                                    colors = listOf(Color(0xFFF3E5F5), Color(0xFFEDE7F6))
+                                )
+                            )
+                            .padding(16.dp)
+                    ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = Color(0xFF7B1FA2), modifier = Modifier.size(20.dp))
+                            Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = Color(0xFF7B1FA2), modifier = Modifier.size(22.dp))
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("AI Analysis", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color(0xFF7B1FA2))
+                            Text("AI Analysis", fontWeight = FontWeight.Bold, fontSize = 17.sp, color = Color(0xFF7B1FA2))
                         }
                         Spacer(modifier = Modifier.height(12.dp))
                         Row(modifier = Modifier.fillMaxWidth()) {
@@ -239,11 +249,22 @@ fun ComplaintDetailScreen(
                                     )
                                     Box(
                                         modifier = Modifier
-                                            .align(Alignment.BottomStart)
-                                            .background(PrimaryBlue)
-                                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                                            .align(Alignment.BottomCenter)
+                                            .fillMaxWidth()
+                                            .background(
+                                                Brush.verticalGradient(
+                                                    colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.6f))
+                                                )
+                                            )
+                                            .padding(horizontal = 8.dp, vertical = 6.dp)
                                     ) {
-                                        Text("Citizen Upload", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                        Text(
+                                            "Citizen Upload",
+                                            color = Color.White,
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            modifier = Modifier.align(Alignment.CenterStart)
+                                        )
                                     }
                                 }
                             }
@@ -419,9 +440,21 @@ fun ComplaintDetailScreen(
                         onClick = { onResolveClick(comp.id) },
                         modifier = Modifier.weight(1f).height(50.dp),
                         shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue)
+                        colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent)
                     ) {
-                        Text("Complete & Photo", fontWeight = FontWeight.Bold)
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(
+                                    Brush.horizontalGradient(
+                                        colors = listOf(PrimaryBlue, PrimaryDark)
+                                    ),
+                                    RoundedCornerShape(12.dp)
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text("Complete & Photo", fontWeight = FontWeight.Bold, color = Color.White)
+                        }
                     }
                 }
             }
@@ -468,15 +501,38 @@ fun InfoChip(icon: ImageVector, text: String) {
 
 @Composable
 fun TimelineItem(title: String, time: String, isCompleted: Boolean, isLast: Boolean) {
+    // Pulse animation for the latest (last) timeline item
+    val infiniteTransition = rememberInfiniteTransition(label = "pulse")
+    val pulseAlpha by infiniteTransition.animateFloat(
+        initialValue = 1f,
+        targetValue = 0.3f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1000, easing = EaseInOut),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "pulseAlpha"
+    )
+
     Row(modifier = Modifier.height(IntrinsicSize.Min)) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Box(
-                modifier = Modifier
-                    .size(16.dp)
-                    .clip(CircleShape)
-                    .background(if (isCompleted) PrimaryBlue else Color.LightGray)
-                    .border(2.dp, Color.White, CircleShape)
-            )
+            Box(contentAlignment = Alignment.Center) {
+                // Pulse ring on the latest item
+                if (isLast && isCompleted) {
+                    Box(
+                        modifier = Modifier
+                            .size(20.dp)
+                            .clip(CircleShape)
+                            .background(PrimaryBlue.copy(alpha = pulseAlpha * 0.3f))
+                    )
+                }
+                Box(
+                    modifier = Modifier
+                        .size(12.dp)
+                        .clip(CircleShape)
+                        .background(if (isCompleted) PrimaryBlue else Color.LightGray)
+                        .border(2.dp, Color.White, CircleShape)
+                )
+            }
             if (!isLast) {
                 Box(
                     modifier = Modifier

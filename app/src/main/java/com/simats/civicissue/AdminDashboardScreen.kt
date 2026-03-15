@@ -18,6 +18,7 @@ import androidx.compose.ui.Alignment
 import kotlinx.coroutines.launch
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
@@ -149,6 +150,10 @@ fun AdminDashboardScreen(
                     containerColor = PrimaryBlue,
                     contentColor = Color.White,
                     shape = CircleShape,
+                    elevation = FloatingActionButtonDefaults.elevation(
+                        defaultElevation = 8.dp,
+                        pressedElevation = 12.dp
+                    ),
                     modifier = Modifier.padding(bottom = 16.dp)
                 ) {
                     Icon(
@@ -377,7 +382,11 @@ fun AdminDrawerContent(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(180.dp)
-                .background(Color(0xFF2962FF))
+                .background(
+                    Brush.linearGradient(
+                        colors = listOf(PrimaryBlue, PrimaryDark)
+                    )
+                )
                 .padding(24.dp),
             contentAlignment = Alignment.BottomStart
         ) {
@@ -519,23 +528,35 @@ fun StatCard(
     ) {
         Column(
             modifier = Modifier.fillMaxSize(),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Text(
-                text = label,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color.Gray,
-                textAlign = TextAlign.Center
+            // Colored top accent border
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(3.dp)
+                    .background(valueColor, RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
             )
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = value,
-                fontSize = 28.sp,
-                fontWeight = FontWeight.Bold,
-                color = valueColor
-            )
+            Column(
+                modifier = Modifier.fillMaxSize(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                Text(
+                    text = label,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.Gray,
+                    textAlign = TextAlign.Center
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = value,
+                    fontSize = 28.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = valueColor
+                )
+            }
         }
     }
 }
@@ -545,6 +566,11 @@ fun OriginalTaskItem(
     task: OriginalCivicTask,
     onClick: () -> Unit = {}
 ) {
+    val priorityColor = when (task.priority) {
+        "HIGH" -> StatusError
+        "MEDIUM" -> StatusWarning
+        else -> StatusInfo
+    }
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -553,48 +579,57 @@ fun OriginalTaskItem(
         colors = CardDefaults.cardColors(containerColor = Color.White),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    task.id,
-                    fontSize = 12.sp,
-                    color = Color.Gray,
-                    fontWeight = FontWeight.Medium
-                )
-                OriginalPriorityTag(task.priority)
-            }
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                task.title,
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color.Black
+        Row(modifier = Modifier.height(IntrinsicSize.Min)) {
+            // Priority accent bar
+            Box(
+                modifier = Modifier
+                    .width(4.dp)
+                    .fillMaxHeight()
+                    .background(priorityColor, RoundedCornerShape(topStart = 12.dp, bottomStart = 12.dp))
             )
-            Spacer(modifier = Modifier.height(12.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        Icons.Default.AccessTime,
-                        contentDescription = null,
-                        tint = Color.Gray,
-                        modifier = Modifier.size(14.dp)
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
+            Column(modifier = Modifier.padding(16.dp).weight(1f)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     Text(
-                        task.time,
+                        task.id,
                         fontSize = 12.sp,
-                        color = Color.Gray
+                        color = Color.Gray,
+                        fontWeight = FontWeight.Medium
                     )
+                    OriginalPriorityTag(task.priority)
                 }
-                OriginalStatusIndicator(task.status)
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    task.title,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.Black
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            Icons.Default.AccessTime,
+                            contentDescription = null,
+                            tint = Color.Gray,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            task.time,
+                            fontSize = 12.sp,
+                            color = Color.Gray
+                        )
+                    }
+                    OriginalStatusIndicator(task.status)
+                }
             }
         }
     }

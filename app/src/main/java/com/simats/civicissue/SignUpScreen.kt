@@ -1,5 +1,6 @@
 package com.simats.civicissue
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -45,24 +46,24 @@ fun SignUpScreen(onBack: () -> Unit, onVerifyAccount: () -> Unit, onLogin: () ->
     val scope = rememberCoroutineScope()
 
     val countryCodes = listOf(
-        "+91" to "India", "+1" to "USA/Canada", "+44" to "UK", "+61" to "Australia", 
-        "+81" to "Japan", "+86" to "China", "+49" to "Germany", "+33" to "France", 
-        "+39" to "Italy", "+7" to "Russia", "+55" to "Brazil", "+27" to "South Africa",
-        "+971" to "UAE", "+65" to "Singapore", "+60" to "Malaysia", "+64" to "New Zealand",
-        "+94" to "Sri Lanka", "+880" to "Bangladesh", "+92" to "Pakistan", "+977" to "Nepal",
-        "+34" to "Spain", "+52" to "Mexico", "+31" to "Netherlands", "+46" to "Sweden",
-        "+41" to "Switzerland", "+43" to "Austria", "+32" to "Belgium", "+45" to "Denmark",
-        "+358" to "Finland", "+47" to "Norway", "+351" to "Portugal", "+30" to "Greece",
-        "+353" to "Ireland", "+354" to "Iceland", "+352" to "Luxembourg", "+356" to "Malta",
-        "+357" to "Cyprus", "+350" to "Gibraltar", "+359" to "Bulgaria", "+380" to "Ukraine",
-        "+381" to "Serbia", "+385" to "Croatia", "+386" to "Slovenia", "+20" to "Egypt",
-        "+90" to "Turkey", "+98" to "Iran", "+966" to "Saudi Arabia", "+62" to "Indonesia",
-        "+82" to "South Korea", "+84" to "Vietnam", "+66" to "Thailand", "+63" to "Philippines",
-        "+54" to "Argentina", "+57" to "Colombia", "+56" to "Chile", "+51" to "Peru",
-        "+58" to "Venezuela", "+53" to "Cuba", "+212" to "Morocco", "+254" to "Kenya",
-        "+234" to "Nigeria", "+233" to "Ghana", "+256" to "Uganda", "+255" to "Tanzania",
-        "+260" to "Zambia", "+263" to "Zimbabwe"
-    ).sortedBy { it.second }
+        Triple("+91", "\uD83C\uDDEE\uD83C\uDDF3", "India"), Triple("+1", "\uD83C\uDDFA\uD83C\uDDF8", "USA/Canada"), Triple("+44", "\uD83C\uDDEC\uD83C\uDDE7", "UK"), Triple("+61", "\uD83C\uDDE6\uD83C\uDDFA", "Australia"),
+        Triple("+81", "\uD83C\uDDEF\uD83C\uDDF5", "Japan"), Triple("+86", "\uD83C\uDDE8\uD83C\uDDF3", "China"), Triple("+49", "\uD83C\uDDE9\uD83C\uDDEA", "Germany"), Triple("+33", "\uD83C\uDDEB\uD83C\uDDF7", "France"),
+        Triple("+39", "\uD83C\uDDEE\uD83C\uDDF9", "Italy"), Triple("+7", "\uD83C\uDDF7\uD83C\uDDFA", "Russia"), Triple("+55", "\uD83C\uDDE7\uD83C\uDDF7", "Brazil"), Triple("+27", "\uD83C\uDDFF\uD83C\uDDE6", "South Africa"),
+        Triple("+971", "\uD83C\uDDE6\uD83C\uDDEA", "UAE"), Triple("+65", "\uD83C\uDDF8\uD83C\uDDEC", "Singapore"), Triple("+60", "\uD83C\uDDF2\uD83C\uDDFE", "Malaysia"), Triple("+64", "\uD83C\uDDF3\uD83C\uDDFF", "New Zealand"),
+        Triple("+94", "\uD83C\uDDF1\uD83C\uDDF0", "Sri Lanka"), Triple("+880", "\uD83C\uDDE7\uD83C\uDDE9", "Bangladesh"), Triple("+92", "\uD83C\uDDF5\uD83C\uDDF0", "Pakistan"), Triple("+977", "\uD83C\uDDF3\uD83C\uDDF5", "Nepal"),
+        Triple("+34", "\uD83C\uDDEA\uD83C\uDDF8", "Spain"), Triple("+52", "\uD83C\uDDF2\uD83C\uDDFD", "Mexico"), Triple("+31", "\uD83C\uDDF3\uD83C\uDDF1", "Netherlands"), Triple("+46", "\uD83C\uDDF8\uD83C\uDDEA", "Sweden"),
+        Triple("+41", "\uD83C\uDDE8\uD83C\uDDED", "Switzerland"), Triple("+43", "\uD83C\uDDE6\uD83C\uDDF9", "Austria"), Triple("+32", "\uD83C\uDDE7\uD83C\uDDEA", "Belgium"), Triple("+45", "\uD83C\uDDE9\uD83C\uDDF0", "Denmark"),
+        Triple("+358", "\uD83C\uDDEB\uD83C\uDDEE", "Finland"), Triple("+47", "\uD83C\uDDF3\uD83C\uDDF4", "Norway"), Triple("+351", "\uD83C\uDDF5\uD83C\uDDF9", "Portugal"), Triple("+30", "\uD83C\uDDEC\uD83C\uDDF7", "Greece"),
+        Triple("+353", "\uD83C\uDDEE\uD83C\uDDEA", "Ireland"), Triple("+354", "\uD83C\uDDEE\uD83C\uDDF8", "Iceland"), Triple("+352", "\uD83C\uDDF1\uD83C\uDDFA", "Luxembourg"), Triple("+356", "\uD83C\uDDF2\uD83C\uDDF9", "Malta"),
+        Triple("+357", "\uD83C\uDDE8\uD83C\uDDFE", "Cyprus"), Triple("+350", "\uD83C\uDDEC\uD83C\uDDEE", "Gibraltar"), Triple("+359", "\uD83C\uDDE7\uD83C\uDDEC", "Bulgaria"), Triple("+380", "\uD83C\uDDFA\uD83C\uDDE6", "Ukraine"),
+        Triple("+381", "\uD83C\uDDF7\uD83C\uDDF8", "Serbia"), Triple("+385", "\uD83C\uDDED\uD83C\uDDF7", "Croatia"), Triple("+386", "\uD83C\uDDF8\uD83C\uDDEE", "Slovenia"), Triple("+20", "\uD83C\uDDEA\uD83C\uDDEC", "Egypt"),
+        Triple("+90", "\uD83C\uDDF9\uD83C\uDDF7", "Turkey"), Triple("+98", "\uD83C\uDDEE\uD83C\uDDF7", "Iran"), Triple("+966", "\uD83C\uDDF8\uD83C\uDDE6", "Saudi Arabia"), Triple("+62", "\uD83C\uDDEE\uD83C\uDDE9", "Indonesia"),
+        Triple("+82", "\uD83C\uDDF0\uD83C\uDDF7", "South Korea"), Triple("+84", "\uD83C\uDDFB\uD83C\uDDF3", "Vietnam"), Triple("+66", "\uD83C\uDDF9\uD83C\uDDED", "Thailand"), Triple("+63", "\uD83C\uDDF5\uD83C\uDDED", "Philippines"),
+        Triple("+54", "\uD83C\uDDE6\uD83C\uDDF7", "Argentina"), Triple("+57", "\uD83C\uDDE8\uD83C\uDDF4", "Colombia"), Triple("+56", "\uD83C\uDDE8\uD83C\uDDF1", "Chile"), Triple("+51", "\uD83C\uDDF5\uD83C\uDDEA", "Peru"),
+        Triple("+58", "\uD83C\uDDFB\uD83C\uDDEA", "Venezuela"), Triple("+53", "\uD83C\uDDE8\uD83C\uDDFA", "Cuba"), Triple("+212", "\uD83C\uDDF2\uD83C\uDDE6", "Morocco"), Triple("+254", "\uD83C\uDDF0\uD83C\uDDEA", "Kenya"),
+        Triple("+234", "\uD83C\uDDF3\uD83C\uDDEC", "Nigeria"), Triple("+233", "\uD83C\uDDEC\uD83C\uDDED", "Ghana"), Triple("+256", "\uD83C\uDDFA\uD83C\uDDEC", "Uganda"), Triple("+255", "\uD83C\uDDF9\uD83C\uDDFF", "Tanzania"),
+        Triple("+260", "\uD83C\uDDFF\uD83C\uDDF2", "Zambia"), Triple("+263", "\uD83C\uDDFF\uD83C\uDDFC", "Zimbabwe")
+    ).sortedBy { it.third }
 
     Scaffold(
         topBar = {
@@ -113,7 +114,8 @@ fun SignUpScreen(onBack: () -> Unit, onVerifyAccount: () -> Unit, onLogin: () ->
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(24.dp),
                     colors = CardDefaults.cardColors(containerColor = Color.White),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                    elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
+                    border = BorderStroke(0.5.dp, Color.LightGray.copy(alpha = 0.3f))
                 ) {
                     Column(
                         modifier = Modifier.padding(24.dp)
@@ -129,10 +131,11 @@ fun SignUpScreen(onBack: () -> Unit, onVerifyAccount: () -> Unit, onLogin: () ->
                             ExposedDropdownMenuBox(
                                 expanded = countryCodeExpanded,
                                 onExpandedChange = { countryCodeExpanded = it },
-                                modifier = Modifier.weight(0.35f)
+                                modifier = Modifier.weight(0.40f)
                             ) {
+                                val selectedFlag = countryCodes.find { it.first == selectedCountryCode }?.second ?: ""
                                 OutlinedTextField(
-                                    value = selectedCountryCode,
+                                    value = "$selectedFlag $selectedCountryCode",
                                     onValueChange = {},
                                     readOnly = true,
                                     modifier = Modifier.menuAnchor().fillMaxWidth(),
@@ -150,9 +153,9 @@ fun SignUpScreen(onBack: () -> Unit, onVerifyAccount: () -> Unit, onLogin: () ->
                                     onDismissRequest = { countryCodeExpanded = false },
                                     modifier = Modifier.background(Color.White)
                                 ) {
-                                    countryCodes.forEach { (code, country) ->
+                                    countryCodes.forEach { (code, flag, country) ->
                                         DropdownMenuItem(
-                                            text = { Text("$country ($code)", color = Color.Black) },
+                                            text = { Text("$flag $country ($code)", color = Color.Black) },
                                             onClick = {
                                                 selectedCountryCode = code
                                                 countryCodeExpanded = false
@@ -165,7 +168,7 @@ fun SignUpScreen(onBack: () -> Unit, onVerifyAccount: () -> Unit, onLogin: () ->
                             OutlinedTextField(
                                 value = phoneNumber,
                                 onValueChange = { phoneNumber = it },
-                                modifier = Modifier.weight(0.65f),
+                                modifier = Modifier.weight(0.60f),
                                 placeholder = { Text("00000 00000", color = Color.Gray) },
                                 shape = RoundedCornerShape(12.dp),
                                 colors = OutlinedTextFieldDefaults.colors(

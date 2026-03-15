@@ -17,6 +17,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -121,25 +123,40 @@ fun ManageDepartmentsScreen(
         if (showAddDialog) {
             AlertDialog(
                 onDismissRequest = { showAddDialog = false; newDeptName = ""; newDeptDesc = "" },
-                title = { Text("Add Department", fontWeight = FontWeight.Bold) },
+                title = {
+                    Column {
+                        Text("Add Department", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(3.dp)
+                                .background(PrimaryBlue, RoundedCornerShape(2.dp))
+                        )
+                    }
+                },
                 text = {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedTextField(value = newDeptName, onValueChange = { newDeptName = it }, label = { Text("Name") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp))
-                        OutlinedTextField(value = newDeptDesc, onValueChange = { newDeptDesc = it }, label = { Text("Description") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp))
+                    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                        OutlinedTextField(value = newDeptName, onValueChange = { newDeptName = it }, label = { Text("Name") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp), singleLine = true)
+                        OutlinedTextField(value = newDeptDesc, onValueChange = { newDeptDesc = it }, label = { Text("Description") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp), minLines = 2)
                     }
                 },
                 confirmButton = {
-                    TextButton(onClick = {
-                        scope.launch {
-                            try {
-                                val created = RetrofitClient.instance.createDepartment(DepartmentCreate(name = newDeptName, description = newDeptDesc.ifBlank { null }))
-                                departmentList = departmentList + created
-                                showAddDialog = false; newDeptName = ""; newDeptDesc = ""
-                            } catch (e: Exception) {
-                                Toast.makeText(context, "Failed: ${e.message}", Toast.LENGTH_SHORT).show()
+                    Button(
+                        onClick = {
+                            scope.launch {
+                                try {
+                                    val created = RetrofitClient.instance.createDepartment(DepartmentCreate(name = newDeptName, description = newDeptDesc.ifBlank { null }))
+                                    departmentList = departmentList + created
+                                    showAddDialog = false; newDeptName = ""; newDeptDesc = ""
+                                } catch (e: Exception) {
+                                    Toast.makeText(context, "Failed: ${e.message}", Toast.LENGTH_SHORT).show()
+                                }
                             }
-                        }
-                    }) { Text("Create", color = PrimaryBlue, fontWeight = FontWeight.Bold) }
+                        },
+                        shape = RoundedCornerShape(8.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue)
+                    ) { Text("Create", fontWeight = FontWeight.Bold) }
                 },
                 dismissButton = {
                     TextButton(onClick = { showAddDialog = false; newDeptName = ""; newDeptDesc = "" }) { Text("Cancel", color = Color.Gray) }
@@ -156,11 +173,20 @@ fun ApiDepartmentItem(
     dept: DepartmentItem,
     onDelete: () -> Unit
 ) {
+    // Generate a consistent color based on department name
+    val deptColors = listOf(
+        Color(0xFF2E61FF), Color(0xFF673AB7), Color(0xFFFFA000),
+        Color(0xFF4CAF50), Color(0xFFE91E63), Color(0xFF009688),
+        Color(0xFF3F51B5), Color(0xFFFF5722)
+    )
+    val colorIndex = (dept.name.hashCode().and(0x7FFFFFFF)) % deptColors.size
+    val accentColor = deptColors[colorIndex]
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
     ) {
         Column(
             modifier = Modifier.padding(16.dp)
@@ -168,14 +194,14 @@ fun ApiDepartmentItem(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Surface(
                     modifier = Modifier.size(44.dp),
-                    shape = RoundedCornerShape(10.dp),
-                    color = PrimaryBlue.copy(alpha = 0.1f)
+                    shape = CircleShape,
+                    color = accentColor.copy(alpha = 0.12f)
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         Icon(
                             imageVector = Icons.Default.CorporateFare,
                             contentDescription = null,
-                            tint = PrimaryBlue,
+                            tint = accentColor,
                             modifier = Modifier.size(24.dp)
                         )
                     }

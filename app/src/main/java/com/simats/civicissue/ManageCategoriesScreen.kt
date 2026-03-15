@@ -129,31 +129,50 @@ fun ManageCategoriesScreen(
         if (showAddDialog) {
             AlertDialog(
                 onDismissRequest = { showAddDialog = false; editingCategory = null; newCategoryName = ""; newCategoryDesc = "" },
-                title = { Text(if (editingCategory != null) "Edit Category" else "Add Category", fontWeight = FontWeight.Bold) },
+                title = {
+                    Column {
+                        Text(
+                            if (editingCategory != null) "Edit Category" else "Add Category",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 18.sp
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(3.dp)
+                                .background(PrimaryBlue, RoundedCornerShape(2.dp))
+                        )
+                    }
+                },
                 text = {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedTextField(value = newCategoryName, onValueChange = { newCategoryName = it }, label = { Text("Name") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp))
-                        OutlinedTextField(value = newCategoryDesc, onValueChange = { newCategoryDesc = it }, label = { Text("Description") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp))
+                    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                        OutlinedTextField(value = newCategoryName, onValueChange = { newCategoryName = it }, label = { Text("Name") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp), singleLine = true)
+                        OutlinedTextField(value = newCategoryDesc, onValueChange = { newCategoryDesc = it }, label = { Text("Description") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp), minLines = 2)
                     }
                 },
                 confirmButton = {
-                    TextButton(onClick = {
-                        scope.launch {
-                            try {
-                                val body = CategoryCreate(name = newCategoryName, description = newCategoryDesc.ifBlank { null })
-                                if (editingCategory != null) {
-                                    val updated = RetrofitClient.instance.updateCategory(editingCategory!!.id, body)
-                                    categoryList = categoryList.map { if (it.id == updated.id) updated else it }
-                                } else {
-                                    val created = RetrofitClient.instance.createCategory(body)
-                                    categoryList = categoryList + created
+                    Button(
+                        onClick = {
+                            scope.launch {
+                                try {
+                                    val body = CategoryCreate(name = newCategoryName, description = newCategoryDesc.ifBlank { null })
+                                    if (editingCategory != null) {
+                                        val updated = RetrofitClient.instance.updateCategory(editingCategory!!.id, body)
+                                        categoryList = categoryList.map { if (it.id == updated.id) updated else it }
+                                    } else {
+                                        val created = RetrofitClient.instance.createCategory(body)
+                                        categoryList = categoryList + created
+                                    }
+                                    showAddDialog = false; editingCategory = null; newCategoryName = ""; newCategoryDesc = ""
+                                } catch (e: Exception) {
+                                    Toast.makeText(context, "Failed: ${e.message}", Toast.LENGTH_SHORT).show()
                                 }
-                                showAddDialog = false; editingCategory = null; newCategoryName = ""; newCategoryDesc = ""
-                            } catch (e: Exception) {
-                                Toast.makeText(context, "Failed: ${e.message}", Toast.LENGTH_SHORT).show()
                             }
-                        }
-                    }) { Text("Save", color = PrimaryBlue, fontWeight = FontWeight.Bold) }
+                        },
+                        shape = RoundedCornerShape(8.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue)
+                    ) { Text("Save", fontWeight = FontWeight.Bold) }
                 },
                 dismissButton = {
                     TextButton(onClick = { showAddDialog = false; editingCategory = null; newCategoryName = ""; newCategoryDesc = "" }) { Text("Cancel", color = Color.Gray) }
@@ -171,11 +190,20 @@ fun ApiCategoryItem(
     onEdit: () -> Unit,
     onDelete: () -> Unit
 ) {
+    // Generate a consistent color based on category name
+    val categoryColors = listOf(
+        Color(0xFF2E61FF), Color(0xFF673AB7), Color(0xFFFFA000),
+        Color(0xFF4CAF50), Color(0xFFE91E63), Color(0xFF009688),
+        Color(0xFF3F51B5), Color(0xFFFF5722)
+    )
+    val colorIndex = (category.name.hashCode().and(0x7FFFFFFF)) % categoryColors.size
+    val accentColor = categoryColors[colorIndex]
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
     ) {
         Row(
             modifier = Modifier
@@ -187,14 +215,14 @@ fun ApiCategoryItem(
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
                 Surface(
                     modifier = Modifier.size(40.dp),
-                    shape = RoundedCornerShape(8.dp),
-                    color = PrimaryBlue.copy(alpha = 0.1f)
+                    shape = CircleShape,
+                    color = accentColor.copy(alpha = 0.12f)
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         Icon(
                             imageVector = Icons.Default.Category,
                             contentDescription = null,
-                            tint = PrimaryBlue,
+                            tint = accentColor,
                             modifier = Modifier.size(20.dp)
                         )
                     }
@@ -204,7 +232,7 @@ fun ApiCategoryItem(
                     Text(
                         text = category.name,
                         fontSize = 16.sp,
-                        fontWeight = FontWeight.Medium,
+                        fontWeight = FontWeight.SemiBold,
                         color = Color.Black
                     )
                     if (!category.description.isNullOrBlank()) {
