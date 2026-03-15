@@ -1,5 +1,6 @@
 package com.simats.civicissue
 
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -16,10 +17,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.simats.civicissue.ui.theme.PrimaryBlue
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -29,18 +32,22 @@ fun AssignOfficerScreen(
     onAssignComplete: (Officer) -> Unit
 ) {
     var searchQuery by remember { mutableStateOf("") }
-    val mockOfficers = remember {
-        listOf(
-            Officer("OFF-001", "Officer Rajesh", "Road Maintenance", 3),
-            Officer("OFF-002", "Officer Sneha", "Welfare & Sanitation", 1),
-            Officer("OFF-003", "Officer Vikram", "Electricity Board", 5),
-            Officer("OFF-004", "Officer Anjali", "Water Management", 2),
-            Officer("OFF-005", "Officer Karthik", "Road Maintenance", 0)
-        )
+    var officers by remember { mutableStateOf<List<Officer>>(emptyList()) }
+    var isLoading by remember { mutableStateOf(true) }
+    var isAssigning by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+
+    LaunchedEffect(Unit) {
+        try {
+            officers = RetrofitClient.instance.getOfficers()
+        } catch (_: Exception) { }
+        finally { isLoading = false }
     }
 
-    val filteredOfficers = mockOfficers.filter { 
-        it.name.contains(searchQuery, ignoreCase = true) || it.department.contains(searchQuery, ignoreCase = true)
+    val filteredOfficers = officers.filter {
+        val displayName = it.fullName.ifEmpty { it.name }
+        displayName.contains(searchQuery, ignoreCase = true) || (it.department ?: "").contains(searchQuery, ignoreCase = true)
     }
 
     Scaffold(
@@ -99,13 +106,34 @@ fun AssignOfficerScreen(
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                items(filteredOfficers) { officer ->
-                    OfficerItem(officer = officer, onClick = { onAssignComplete(officer) })
+            if (isLoading || isAssigning) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(color = PrimaryBlue)
+                }
+            } else {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    items(filteredOfficers) { officer ->
+                        OfficerItem(officer = officer, onClick = {
+                            isAssigning = true
+                            scope.launch {
+                                try {
+                                    RetrofitClient.instance.assignOfficer(
+                                        complaintId,
+                                        AssignOfficerRequest(officer_id = officer.userId.ifEmpty { officer.id })
+                                    )
+                                    Toast.makeText(context, "Officer assigned successfully", Toast.LENGTH_SHORT).show()
+                                    onAssignComplete(officer)
+                                } catch (e: Exception) {
+                                    Toast.makeText(context, "Failed to assign: ${e.message}", Toast.LENGTH_SHORT).show()
+                                    isAssigning = false
+                                }
+                            }
+                        })
+                    }
                 }
             }
         }
@@ -134,7 +162,7 @@ fun OfficerItem(officer: Officer, onClick: () -> Unit) {
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    officer.name.take(1),
+                    (officer.fullName.ifEmpty { officer.name }).take(1),
                     fontWeight = FontWeight.Bold,
                     color = PrimaryBlue,
                     fontSize = 20.sp
@@ -142,8 +170,8 @@ fun OfficerItem(officer: Officer, onClick: () -> Unit) {
             }
             Spacer(modifier = Modifier.width(16.dp))
             Column(modifier = Modifier.weight(1f)) {
-                Text(officer.name, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                Text(officer.department, color = Color.Gray, fontSize = 12.sp)
+                Text(officer.fullName.ifEmpty { officer.name }, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                Text(officer.department ?: "No department", color = Color.Gray, fontSize = 12.sp)
             }
             Column(horizontalAlignment = Alignment.End) {
                 Text("Workload", fontSize = 10.sp, color = Color.Gray)

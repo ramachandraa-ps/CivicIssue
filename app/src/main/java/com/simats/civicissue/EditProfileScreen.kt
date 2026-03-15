@@ -1,11 +1,13 @@
 package com.simats.civicissue
 
+import android.util.Log
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -13,6 +15,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.simats.civicissue.ui.theme.BackgroundBlue
 import com.simats.civicissue.ui.theme.PrimaryBlue
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -20,9 +23,13 @@ fun EditProfileScreen(
     onBack: () -> Unit,
     onSave: () -> Unit
 ) {
-    var name by remember { mutableStateOf("") }
-    var email by remember { mutableStateOf("") }
-    var phone by remember { mutableStateOf("") }
+    val currentProfile = TokenManager.getUser()
+    var name by remember { mutableStateOf(currentProfile?.full_name ?: "") }
+    var email by remember { mutableStateOf(currentProfile?.email ?: "") }
+    var phone by remember { mutableStateOf(currentProfile?.phone_number ?: "") }
+    var isSaving by remember { mutableStateOf(false) }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
 
     Scaffold(
         topBar = {
@@ -86,14 +93,46 @@ fun EditProfileScreen(
                     focusedBorderColor = PrimaryBlue
                 )
             )
-            Spacer(modifier = Modifier.height(32.dp))
+            Spacer(modifier = Modifier.height(16.dp))
+
+            if (errorMessage != null) {
+                Text(errorMessage!!, color = Color.Red, fontSize = 13.sp, modifier = Modifier.padding(bottom = 8.dp))
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
             Button(
-                onClick = onSave,
+                onClick = {
+                    if (isSaving) return@Button
+                    isSaving = true
+                    errorMessage = null
+                    scope.launch {
+                        try {
+                            val updated = RetrofitClient.instance.updateProfile(
+                                UpdateProfileRequest(
+                                    full_name = name.ifBlank { null },
+                                    phone_number = phone.ifBlank { null }
+                                )
+                            )
+                            TokenManager.saveUser(updated)
+                            onSave()
+                        } catch (e: Exception) {
+                            errorMessage = e.message ?: "Update failed"
+                            Log.e("EditProfile", "Update failed", e)
+                        } finally {
+                            isSaving = false
+                        }
+                    }
+                },
                 modifier = Modifier.fillMaxWidth().height(56.dp),
                 shape = RoundedCornerShape(12.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue)
+                colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue),
+                enabled = !isSaving
             ) {
-                Text("Save Changes", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                if (isSaving) {
+                    CircularProgressIndicator(color = Color.White, modifier = Modifier.size(24.dp))
+                } else {
+                    Text("Save Changes", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                }
             }
         }
     }

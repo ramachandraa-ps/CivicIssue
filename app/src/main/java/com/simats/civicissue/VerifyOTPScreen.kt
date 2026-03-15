@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.simats.civicissue.ui.theme.*
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -33,6 +34,10 @@ fun VerifyOTPScreen(role: String = "Citizen", onBack: () -> Unit, onContinue: ()
     val otpValues = remember { mutableStateListOf("", "", "", "", "", "") }
     val focusRequesters = remember { List(6) { FocusRequester() } }
     val focusManager = LocalFocusManager.current
+    var isLoading by remember { mutableStateOf(false) }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
+    val userEmail = TokenManager.pendingEmail ?: ""
 
     var timeLeft by remember { mutableStateOf(59) }
     var canResend by remember { mutableStateOf(false) }
@@ -46,31 +51,29 @@ fun VerifyOTPScreen(role: String = "Citizen", onBack: () -> Unit, onContinue: ()
         }
     }
 
-    Surface(
-        modifier = Modifier.fillMaxSize(),
-        color = BackgroundBlue
-    ) {
-        Column(
-            modifier = Modifier.fillMaxSize()
-        ) {
-            // Top Bar
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                IconButton(onClick = onBack) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Color.Black)
-                }
-                Text(
-                    text = "Verify Reset OTP",
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.Black
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Verify Reset OTP", fontWeight = FontWeight.Bold) },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = Color(0xFFF0F4FF),
+                    titleContentColor = Color.Black,
+                    navigationIconContentColor = Color.Black
                 )
-            }
-
+            )
+        },
+        containerColor = Color(0xFFF0F4FF)
+    ) { paddingValues ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+        ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -164,17 +167,61 @@ fun VerifyOTPScreen(role: String = "Citizen", onBack: () -> Unit, onContinue: ()
                     }
                 }
 
+                if (errorMessage != null) {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        text = errorMessage!!,
+                        color = Color.Red,
+                        fontSize = 14.sp
+                    )
+                }
+
                 Spacer(modifier = Modifier.weight(1f))
 
                 Button(
-                    onClick = onContinue,
+                    onClick = {
+                        val otpCode = otpValues.joinToString("")
+                        if (otpCode.length < 6) {
+                            errorMessage = "Please enter the complete 6-digit OTP"
+                            return@Button
+                        }
+                        scope.launch {
+                            isLoading = true
+                            errorMessage = null
+                            try {
+                                RetrofitClient.instance.verifyOtp(
+                                    VerifyOtpRequest(email = userEmail, otp_code = otpCode)
+                                )
+                                TokenManager.pendingOtp = otpCode
+                                onContinue()
+                            } catch (e: retrofit2.HttpException) {
+                                errorMessage = when (e.code()) {
+                                    400 -> "Invalid or expired OTP"
+                                    else -> "Verification failed: ${e.message()}"
+                                }
+                            } catch (e: Exception) {
+                                errorMessage = e.message ?: "Something went wrong"
+                            } finally {
+                                isLoading = false
+                            }
+                        }
+                    },
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(56.dp),
                     shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue)
+                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue),
+                    enabled = !isLoading
                 ) {
-                    Text("Continue", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                    if (isLoading) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(24.dp),
+                            color = Color.White,
+                            strokeWidth = 2.dp
+                        )
+                    } else {
+                        Text("Continue", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(32.dp))

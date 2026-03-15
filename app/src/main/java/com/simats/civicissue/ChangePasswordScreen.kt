@@ -15,6 +15,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.simats.civicissue.ui.theme.BackgroundBlue
 import com.simats.civicissue.ui.theme.PrimaryBlue
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -25,6 +26,9 @@ fun ChangePasswordScreen(
     var oldPassword by remember { mutableStateOf("") }
     var newPassword by remember { mutableStateOf("") }
     var confirmPassword by remember { mutableStateOf("") }
+    var isLoading by remember { mutableStateOf(false) }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
 
     Scaffold(
         topBar = {
@@ -91,14 +95,62 @@ fun ChangePasswordScreen(
                     focusedBorderColor = PrimaryBlue
                 )
             )
+            if (errorMessage != null) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = errorMessage!!,
+                    color = Color.Red,
+                    fontSize = 14.sp
+                )
+            }
             Spacer(modifier = Modifier.height(32.dp))
             Button(
-                onClick = onUpdatePassword,
+                onClick = {
+                    if (newPassword != confirmPassword) {
+                        errorMessage = "New passwords do not match"
+                        return@Button
+                    }
+                    if (oldPassword.isBlank() || newPassword.isBlank()) {
+                        errorMessage = "Please fill in all fields"
+                        return@Button
+                    }
+                    scope.launch {
+                        isLoading = true
+                        errorMessage = null
+                        try {
+                            RetrofitClient.instance.changePassword(
+                                ChangePasswordRequest(
+                                    current_password = oldPassword,
+                                    new_password = newPassword
+                                )
+                            )
+                            onUpdatePassword()
+                        } catch (e: retrofit2.HttpException) {
+                            errorMessage = when (e.code()) {
+                                401 -> "Current password is incorrect"
+                                else -> "Failed to change password: ${e.message()}"
+                            }
+                        } catch (e: Exception) {
+                            errorMessage = e.message ?: "Something went wrong"
+                        } finally {
+                            isLoading = false
+                        }
+                    }
+                },
                 modifier = Modifier.fillMaxWidth().height(56.dp),
                 shape = RoundedCornerShape(12.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue)
+                colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue),
+                enabled = !isLoading && oldPassword.isNotBlank() && newPassword.isNotBlank() && confirmPassword.isNotBlank()
             ) {
-                Text("Update Password", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                if (isLoading) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(24.dp),
+                        color = Color.White,
+                        strokeWidth = 2.dp
+                    )
+                } else {
+                    Text("Update Password", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                }
             }
         }
     }

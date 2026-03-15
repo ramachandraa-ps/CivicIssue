@@ -27,8 +27,10 @@ class MainActivity : ComponentActivity() {
                 
                 NavHost(navController = navController, startDestination = "splash") {
                     composable("splash") {
-                        SplashScreen(onNavigate = { 
-                            navController.navigate("role_selection") 
+                        SplashScreen(onNavigate = {
+                            navController.navigate("role_selection") {
+                                popUpTo("splash") { inclusive = true }
+                            }
                         })
                     }
                     composable("role_selection") {
@@ -43,14 +45,14 @@ class MainActivity : ComponentActivity() {
                             onBack = { navController.popBackStack() },
                             onSignUp = { navController.navigate("signup") },
                             onForgotPassword = { navController.navigate("reset_password/$role") },
-                            onLoginSuccess = {
-                                if (role == "Admin") {
+                            onLoginSuccess = { userRole ->
+                                if (userRole == "admin") {
                                     navController.navigate("admin_dashboard") {
-                                        popUpTo("role_selection") { inclusive = false }
+                                        popUpTo(0) { inclusive = true }
                                     }
                                 } else {
                                     navController.navigate("citizen_dashboard") {
-                                        popUpTo("role_selection") { inclusive = false }
+                                        popUpTo(0) { inclusive = true }
                                     }
                                 }
                             }
@@ -77,7 +79,7 @@ class MainActivity : ComponentActivity() {
                         AccountCreatedScreen(
                             onProceedToLogin = {
                                 navController.navigate("role_selection") {
-                                    popUpTo("splash") { inclusive = false }
+                                    popUpTo(0) { inclusive = true }
                                 }
                             }
                         )
@@ -95,10 +97,11 @@ class MainActivity : ComponentActivity() {
                             onProfileClick = { navController.navigate("admin_profile") },
                             onHistoryClick = { navController.navigate("issue_history") },
                             onProfessionalDashboardClick = { navController.navigate("modern_admin_dashboard") },
-                            onTaskClick = { complaintId -> 
-                                navController.navigate("complaint_detail/$complaintId") 
+                            onTaskClick = { complaintId ->
+                                navController.navigate("complaint_detail/$complaintId")
                             },
-                            onAIChatClick = { navController.navigate("admin_ai_chatbot") }
+                            onAIChatClick = { navController.navigate("admin_ai_chatbot") },
+                            onAnalyticsClick = { navController.navigate("analytics") }
                         )
                     }
                     composable("admin_ai_chatbot") {
@@ -137,12 +140,17 @@ class MainActivity : ComponentActivity() {
                     }
                     composable("report_issue") {
                         ReportIssueScreen(
-                            onBack = { navController.popBackStack() },
+                            onBack = {
+                                navController.navigate("citizen_dashboard") {
+                                    popUpTo("citizen_dashboard") { inclusive = true }
+                                }
+                            },
                             onViewComplaints = {
                                 navController.navigate("citizen_issues") {
                                     popUpTo("citizen_dashboard") { inclusive = false }
                                 }
-                            }
+                            },
+                            onProfileClick = { navController.navigate("citizen_profile") }
                         )
                     }
                     composable("citizen_notifications") {
@@ -158,11 +166,12 @@ class MainActivity : ComponentActivity() {
                     composable("citizen_issues") {
                         CitizenIssuesScreen(
                             onBack = { navController.popBackStack() },
-                            onHomeClick = { 
+                            onHomeClick = {
                                 navController.navigate("citizen_dashboard") {
                                     popUpTo("citizen_dashboard") { inclusive = true }
                                 }
                             },
+                            onReportClick = { navController.navigate("report_issue") },
                             onProfileClick = { navController.navigate("citizen_profile") }
                         )
                     }
@@ -170,6 +179,7 @@ class MainActivity : ComponentActivity() {
                         ActiveIssuesScreen(
                             onBack = { navController.popBackStack() },
                             onHomeClick = { navController.navigate("citizen_dashboard") },
+                            onReportClick = { navController.navigate("report_issue") },
                             onIssuesClick = { navController.navigate("citizen_issues") },
                             onProfileClick = { navController.navigate("citizen_profile") }
                         )
@@ -178,6 +188,7 @@ class MainActivity : ComponentActivity() {
                         ResolvedIssuesScreen(
                             onBack = { navController.popBackStack() },
                             onHomeClick = { navController.navigate("citizen_dashboard") },
+                            onReportClick = { navController.navigate("report_issue") },
                             onIssuesClick = { navController.navigate("citizen_issues") },
                             onProfileClick = { navController.navigate("citizen_profile") }
                         )
@@ -186,12 +197,14 @@ class MainActivity : ComponentActivity() {
                         CitizenProfileScreen(
                             onBack = { navController.popBackStack() },
                             onHomeClick = { navController.navigate("citizen_dashboard") },
+                            onReportClick = { navController.navigate("report_issue") },
                             onIssuesClick = { navController.navigate("citizen_issues") },
                             onEditProfile = { navController.navigate("edit_profile") },
                             onChangePassword = { navController.navigate("citizen_change_password") },
                             onLogoutClick = {
+                                TokenManager.clear()
                                 navController.navigate("role_selection") {
-                                    popUpTo("splash") { inclusive = false }
+                                    popUpTo(0) { inclusive = true }
                                 }
                             }
                         )
@@ -310,13 +323,19 @@ class MainActivity : ComponentActivity() {
                             onBack = { navController.popBackStack() }
                         )
                     }
+                    composable("analytics") {
+                        AnalyticsScreen(
+                            onBack = { navController.popBackStack() }
+                        )
+                    }
                     composable("admin_profile") {
                         AdminProfileScreen(
                             onBack = { navController.popBackStack() },
                             onChangePassword = { navController.navigate("change_password") },
                             onLogoutClick = {
+                                TokenManager.clear()
                                 navController.navigate("role_selection") {
-                                    popUpTo("splash") { inclusive = false }
+                                    popUpTo(0) { inclusive = true }
                                 }
                             }
                         )
@@ -334,8 +353,9 @@ class MainActivity : ComponentActivity() {
                     composable("logout") {
                         LogoutScreen(
                             onConfirm = {
+                                TokenManager.clear()
                                 navController.navigate("role_selection") {
-                                    popUpTo("admin_dashboard") { inclusive = true }
+                                    popUpTo(0) { inclusive = true }
                                 }
                             },
                             onCancel = { navController.popBackStack() }

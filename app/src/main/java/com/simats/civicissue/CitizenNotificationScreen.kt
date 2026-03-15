@@ -1,6 +1,7 @@
 package com.simats.civicissue
 
 import android.graphics.Bitmap
+import android.util.Log
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -28,15 +29,31 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.simats.civicissue.ui.theme.CivicIssueTheme
 import com.simats.civicissue.ui.theme.PrimaryBlue
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CitizenNotificationScreen(
     onBack: () -> Unit = {}
 ) {
-    var selectedNotification by remember { mutableStateOf<CitizenNotificationInfo?>(null) }
+    var notifications by remember { mutableStateOf<List<CivicNotification>>(emptyList()) }
+    var isLoading by remember { mutableStateOf(true) }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
+    var selectedNotification by remember { mutableStateOf<CivicNotification?>(null) }
     var showSheet by remember { mutableStateOf(false) }
     val sheetState = rememberModalBottomSheetState()
+    val scope = rememberCoroutineScope()
+
+    LaunchedEffect(Unit) {
+        try {
+            notifications = RetrofitClient.instance.getNotifications()
+        } catch (e: Exception) {
+            errorMessage = e.message ?: "Failed to load notifications"
+            Log.e("Notifications", "Load failed", e)
+        } finally {
+            isLoading = false
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -58,6 +75,18 @@ fun CitizenNotificationScreen(
                         )
                     }
                 },
+                actions = {
+                    TextButton(onClick = {
+                        scope.launch {
+                            try {
+                                RetrofitClient.instance.markAllNotificationsRead()
+                                notifications = notifications.map { it.copy(isRead = true) }
+                            } catch (_: Exception) {}
+                        }
+                    }) {
+                        Text("Mark All Read", color = PrimaryBlue, fontSize = 12.sp)
+                    }
+                },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = Color.White
                 )
@@ -65,18 +94,44 @@ fun CitizenNotificationScreen(
         },
         containerColor = Color(0xFFF5F7FA)
     ) { paddingValues ->
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-                .padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-            contentPadding = PaddingValues(vertical = 16.dp)
-        ) {
-            items(CitizenNotificationStore.citizenNotifications) { notification ->
-                CitizenNotificationItem(notification = notification) {
-                    selectedNotification = notification
-                    showSheet = true
+        if (isLoading) {
+            Box(modifier = Modifier.fillMaxSize().padding(paddingValues), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(color = PrimaryBlue)
+            }
+        } else if (errorMessage != null) {
+            Box(modifier = Modifier.fillMaxSize().padding(paddingValues), contentAlignment = Alignment.Center) {
+                Text(errorMessage!!, color = Color.Red)
+            }
+        } else if (notifications.isEmpty()) {
+            Box(modifier = Modifier.fillMaxSize().padding(paddingValues), contentAlignment = Alignment.Center) {
+                Text("No notifications yet.", color = Color.DarkGray)
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues)
+                    .padding(horizontal = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                contentPadding = PaddingValues(vertical = 16.dp)
+            ) {
+                items(notifications) { notification ->
+                    val info = notification.toNotificationInfo()
+                    CitizenNotificationItem(notification = info) {
+                        selectedNotification = notification
+                        showSheet = true
+                        // Mark as read
+                        if (!notification.isRead) {
+                            scope.launch {
+                                try {
+                                    RetrofitClient.instance.markNotificationRead(notification.id)
+                                    notifications = notifications.map {
+                                        if (it.id == notification.id) it.copy(isRead = true) else it
+                                    }
+                                } catch (_: Exception) {}
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -88,7 +143,7 @@ fun CitizenNotificationScreen(
                 containerColor = Color.White,
                 dragHandle = { BottomSheetDefaults.DragHandle() }
             ) {
-                selectedNotification?.let { NotificationDetailContent(it) }
+                selectedNotification?.let { NotificationDetailContent(it.toNotificationInfo()) }
             }
         }
     }
@@ -252,51 +307,28 @@ data class CitizenNotificationInfo(
     val image: Bitmap? = null
 )
 
-object CitizenNotificationStore {
-    val citizenNotifications = mutableStateListOf(
-        CitizenNotificationInfo(
-            "Work Completed!",
-            "The issue #CE-112 at Jubilee Hills has been resolved. [Completion Photo Attached]",
-            "Just now",
-            Icons.Default.TaskAlt,
-            Color(0xFF4CAF50)
-        ),
-        CitizenNotificationInfo(
-            "Issue Reported Successfully",
-            "Your report about 'Pothole on Main St.' (#CE-112) has been successfully submitted.",
-            "Just now",
-            Icons.Default.CheckCircle,
-            Color(0xFF4CAF50)
-        ),
-        CitizenNotificationInfo(
-            "Status Update",
-            "The status of your report #CE-108 has been changed to 'In Progress'.",
-            "2h ago",
-            Icons.Default.Refresh,
-            PrimaryBlue
-        ),
-        CitizenNotificationInfo(
-            "Official Response",
-            "An official has added a comment to your report regarding street lights.",
-            "5h ago",
-            Icons.Default.Comment,
-            Color(0xFFFFA000)
-        ),
-        CitizenNotificationInfo(
-            "Maintenance Alert",
-            "Planned maintenance in your area will cause water supply cuts tomorrow.",
-            "1d ago",
-            Icons.Default.Warning,
-            Color(0xFFD32F2F)
-        ),
-        CitizenNotificationInfo(
-            "Congratulations!",
-            "Thank you for being an active citizen! Your 10th report was resolved.",
-            "2d ago",
-            Icons.Default.Stars,
-            Color(0xFF9C27B0)
-        )
+fun CivicNotification.toNotificationInfo(): CitizenNotificationInfo {
+    val iconAndColor = when (type.lowercase()) {
+        "status_update" -> Icons.Default.Refresh to PrimaryBlue
+        "complaint_created" -> Icons.Default.CheckCircle to Color(0xFF4CAF50)
+        "complaint_resolved", "resolved" -> Icons.Default.TaskAlt to Color(0xFF4CAF50)
+        "assignment" -> Icons.Default.PersonAdd to PrimaryBlue
+        "comment" -> Icons.Default.Comment to Color(0xFFFFA000)
+        "alert", "warning" -> Icons.Default.Warning to Color(0xFFD32F2F)
+        else -> Icons.Default.Notifications to PrimaryBlue
+    }
+    return CitizenNotificationInfo(
+        title = title,
+        message = message,
+        time = createdAt?.let { formatDate(it) } ?: "",
+        icon = iconAndColor.first,
+        color = iconAndColor.second
     )
+}
+
+// Keep for backward compat but no longer used for data
+object CitizenNotificationStore {
+    val citizenNotifications = mutableStateListOf<CitizenNotificationInfo>()
 }
 
 @Preview(showBackground = true)

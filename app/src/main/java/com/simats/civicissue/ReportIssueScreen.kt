@@ -31,43 +31,153 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.simats.civicissue.ui.theme.CivicIssueTheme
-import com.simats.civicissue.ui.theme.PrimaryBlue
-import kotlinx.coroutines.delay
+import com.simats.civicissue.ui.theme.*
+import com.google.gson.Gson
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.RequestBody.Companion.toRequestBody
+import android.Manifest
+import android.content.Context
+import android.content.pm.PackageManager
+import android.location.LocationManager
+import android.util.Log
+import androidx.core.content.ContextCompat
+import androidx.compose.ui.platform.LocalContext
+import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.Priority
+import com.google.android.gms.tasks.CancellationTokenSource
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ReportIssueScreen(
     onBack: () -> Unit = {},
-    onViewComplaints: () -> Unit = {}
+    onViewComplaints: () -> Unit = {},
+    onProfileClick: () -> Unit = {}
 ) {
+    val context = LocalContext.current
     var location by remember { mutableStateOf("") }
     var selectedCategory by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
     var categoryExpanded by remember { mutableStateOf(false) }
     var isSubmitted by remember { mutableStateOf(false) }
+    var submittedComplaintNumber by remember { mutableStateOf("") }
     var capturedBitmap by remember { mutableStateOf<Bitmap?>(null) }
     var selectedImageUri by remember { mutableStateOf<Uri?>(null) }
-    
+
     // AI States
     var isDetectingAI by remember { mutableStateOf(false) }
     var showSeverityPopup by remember { mutableStateOf(false) }
-    var detectedSeverity by remember { mutableStateOf("High") }
-    
+    var detectedSeverity by remember { mutableStateOf("") }
+    var detectedCategory by remember { mutableStateOf("") }
+    var aiConfidence by remember { mutableStateOf(0f) }
+    var aiDescriptionSuggestion by remember { mutableStateOf("") }
+
+    // Submission state
+    var isSubmitting by remember { mutableStateOf(false) }
+    var submitError by remember { mutableStateOf<String?>(null) }
+
+    // Location state
+    var latitude by remember { mutableStateOf(0.0) }
+    var longitude by remember { mutableStateOf(0.0) }
+
     // Map State
     var showMapPicker by remember { mutableStateOf(false) }
+
+    // GPS Location
+    val fusedLocationClient = remember { LocationServices.getFusedLocationProviderClient(context) }
+    var locationLoading by remember { mutableStateOf(false) }
+    var showLocationOffDialog by remember { mutableStateOf(false) }
 
     val categories = listOf("Pothole", "Street Light", "Waste Collection", "Water Leakage", "Drainage", "Other")
 
     val scope = rememberCoroutineScope()
-    
-    fun simulateAIDetection() {
+
+    val locationPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        val fineGranted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true
+        val coarseGranted = permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
+        if (fineGranted || coarseGranted) {
+            // Check if GPS/network location is actually enabled
+            val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
+            val isGpsEnabled = locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)
+            val isNetworkEnabled = locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)
+
+            if (!isGpsEnabled && !isNetworkEnabled) {
+                showLocationOffDialog = true
+                return@rememberLauncherForActivityResult
+            }
+
+            locationLoading = true
+            try {
+                fusedLocationClient.getCurrentLocation(
+                    Priority.PRIORITY_HIGH_ACCURACY,
+                    CancellationTokenSource().token
+                ).addOnSuccessListener { loc ->
+                    if (loc != null) {
+                        latitude = loc.latitude
+                        longitude = loc.longitude
+                        scope.launch {
+                            try {
+                                val geo = RetrofitClient.instance.reverseGeocode(loc.latitude, loc.longitude)
+                                location = geo.displayName
+                            } catch (e: Exception) {
+                                location = "Lat: ${loc.latitude}, Lng: ${loc.longitude}"
+                            }
+                            locationLoading = false
+                        }
+                    } else {
+                        locationLoading = false
+                        // Try last known location as fallback
+                        fusedLocationClient.lastLocation.addOnSuccessListener { lastLoc ->
+                            if (lastLoc != null) {
+                                latitude = lastLoc.latitude
+                                longitude = lastLoc.longitude
+                                scope.launch {
+                                    try {
+                                        val geo = RetrofitClient.instance.reverseGeocode(lastLoc.latitude, lastLoc.longitude)
+                                        location = geo.displayName
+                                    } catch (e: Exception) {
+                                        location = "Lat: ${lastLoc.latitude}, Lng: ${lastLoc.longitude}"
+                                    }
+                                }
+                            } else {
+                                submitError = "Could not get location. Please ensure GPS is enabled and try again."
+                            }
+                        }
+                    }
+                }.addOnFailureListener {
+                    locationLoading = false
+                }
+            } catch (e: SecurityException) {
+                locationLoading = false
+            }
+        }
+    }
+
+    fun runAIAnalysis(bitmap: Bitmap?) {
+        if (bitmap == null) return
         isDetectingAI = true
         scope.launch {
-            delay(2000) // Simulate 2 seconds of analysis
-            isDetectingAI = false
-            showSeverityPopup = true
+            try {
+                val api = RetrofitClient.instance
+                val imagePart = bitmap.toMultipartPart("image")
+                val result = api.analyzeImage(imagePart)
+                detectedCategory = result.detectedCategory
+                detectedSeverity = result.severityLevel
+                aiConfidence = result.confidenceScore
+                aiDescriptionSuggestion = result.descriptionSuggestion
+                if (selectedCategory.isEmpty() && detectedCategory.isNotEmpty()) {
+                    selectedCategory = detectedCategory
+                }
+                showSeverityPopup = true
+            } catch (e: Exception) {
+                Log.e("ReportIssue", "AI analysis failed: ${e.message}")
+                detectedSeverity = "MEDIUM"
+                showSeverityPopup = true
+            } finally {
+                isDetectingAI = false
+            }
         }
     }
 
@@ -76,7 +186,7 @@ fun ReportIssueScreen(
         if (bitmap != null) {
             capturedBitmap = bitmap
             selectedImageUri = null
-            simulateAIDetection()
+            runAIAnalysis(bitmap)
         }
     }
 
@@ -85,12 +195,24 @@ fun ReportIssueScreen(
         if (uri != null) {
             selectedImageUri = uri
             capturedBitmap = null
-            simulateAIDetection()
+            // Convert URI to bitmap for AI analysis
+            try {
+                val inputStream = context.contentResolver.openInputStream(uri)
+                val bitmap = android.graphics.BitmapFactory.decodeStream(inputStream)
+                inputStream?.close()
+                if (bitmap != null) {
+                    capturedBitmap = bitmap
+                    runAIAnalysis(bitmap)
+                }
+            } catch (e: Exception) {
+                Log.e("ReportIssue", "Failed to read gallery image: ${e.message}")
+            }
         }
     }
 
     if (isSubmitted) {
         SuccessView(
+            complaintNumber = submittedComplaintNumber,
             onBackToHome = onBack,
             onTrackStatus = onViewComplaints
         )
@@ -123,58 +245,59 @@ fun ReportIssueScreen(
                 )
             },
             bottomBar = {
-                Surface(tonalElevation = 8.dp, color = Color.White) {
-                    NavigationBar(
-                        containerColor = Color.White,
-                        modifier = Modifier.height(72.dp)
-                    ) {
-                        NavigationBarItem(
-                            selected = false,
-                            onClick = onBack,
-                            icon = { Icon(Icons.Default.Home, contentDescription = "Home") },
-                            label = { Text("Home", fontSize = 11.sp) },
-                            colors = NavigationBarItemDefaults.colors(
-                                unselectedIconColor = Color.DarkGray,
-                                unselectedTextColor = Color.DarkGray
-                            )
+                NavigationBar(containerColor = Color.White, tonalElevation = 8.dp) {
+                    NavigationBarItem(
+                        selected = false,
+                        onClick = onBack,
+                        icon = { Icon(Icons.Filled.Home, contentDescription = "Home") },
+                        label = { Text("Home", fontSize = 11.sp) },
+                        colors = NavigationBarItemDefaults.colors(
+                            selectedIconColor = PrimaryBlue,
+                            selectedTextColor = PrimaryBlue,
+                            unselectedIconColor = Color.Gray,
+                            unselectedTextColor = Color.Gray
                         )
-                        NavigationBarItem(
-                            selected = true,
-                            onClick = { },
-                            icon = { Icon(Icons.Default.Warning, contentDescription = "Report") },
-                            label = { Text("Report", fontSize = 11.sp) },
-                            colors = NavigationBarItemDefaults.colors(
-                                selectedIconColor = PrimaryBlue,
-                                selectedTextColor = PrimaryBlue,
-                                unselectedIconColor = Color.DarkGray,
-                                unselectedTextColor = Color.DarkGray,
-                                indicatorColor = PrimaryBlue.copy(alpha = 0.1f)
-                            )
+                    )
+                    NavigationBarItem(
+                        selected = true,
+                        onClick = { /* Already on Report */ },
+                        icon = { Icon(Icons.Filled.AddCircle, contentDescription = "Report") },
+                        label = { Text("Report", fontSize = 11.sp) },
+                        colors = NavigationBarItemDefaults.colors(
+                            selectedIconColor = PrimaryBlue,
+                            selectedTextColor = PrimaryBlue,
+                            unselectedIconColor = Color.Gray,
+                            unselectedTextColor = Color.Gray,
+                            indicatorColor = PrimaryBlue.copy(alpha = 0.1f)
                         )
-                        NavigationBarItem(
-                            selected = false,
-                            onClick = onViewComplaints,
-                            icon = { Icon(Icons.AutoMirrored.Filled.FormatListBulleted, contentDescription = "Complaints") },
-                            label = { Text("Complaints", fontSize = 11.sp) },
-                            colors = NavigationBarItemDefaults.colors(
-                                unselectedIconColor = Color.DarkGray,
-                                unselectedTextColor = Color.DarkGray
-                            )
+                    )
+                    NavigationBarItem(
+                        selected = false,
+                        onClick = onViewComplaints,
+                        icon = { Icon(Icons.Filled.Assignment, contentDescription = "Issues") },
+                        label = { Text("Issues", fontSize = 11.sp) },
+                        colors = NavigationBarItemDefaults.colors(
+                            selectedIconColor = PrimaryBlue,
+                            selectedTextColor = PrimaryBlue,
+                            unselectedIconColor = Color.Gray,
+                            unselectedTextColor = Color.Gray
                         )
-                        NavigationBarItem(
-                            selected = false,
-                            onClick = { },
-                            icon = { Icon(Icons.Default.PersonOutline, contentDescription = "Profile") },
-                            label = { Text("Profile", fontSize = 11.sp) },
-                            colors = NavigationBarItemDefaults.colors(
-                                unselectedIconColor = Color.DarkGray,
-                                unselectedTextColor = Color.DarkGray
-                            )
+                    )
+                    NavigationBarItem(
+                        selected = false,
+                        onClick = onProfileClick,
+                        icon = { Icon(Icons.Filled.Person, contentDescription = "Profile") },
+                        label = { Text("Profile", fontSize = 11.sp) },
+                        colors = NavigationBarItemDefaults.colors(
+                            selectedIconColor = PrimaryBlue,
+                            selectedTextColor = PrimaryBlue,
+                            unselectedIconColor = Color.Gray,
+                            unselectedTextColor = Color.Gray
                         )
-                    }
+                    )
                 }
             },
-            containerColor = Color(0xFFF8F9FA)
+            containerColor = BackgroundLight
         ) { paddingValues ->
             Column(
                 modifier = Modifier
@@ -212,15 +335,92 @@ fun ReportIssueScreen(
                         )
                     },
                     trailingIcon = {
-                        Text(
-                            "Locate Me",
-                            color = PrimaryBlue,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier
-                                .padding(end = 12.dp)
-                                .clickable { location = "Near CMR School, Medchal, Hyderabad" },
-                            fontSize = 12.sp
-                        )
+                        if (locationLoading) {
+                            CircularProgressIndicator(
+                                color = PrimaryBlue,
+                                modifier = Modifier
+                                    .padding(end = 12.dp)
+                                    .size(18.dp),
+                                strokeWidth = 2.dp
+                            )
+                        } else {
+                            Text(
+                                "Locate Me",
+                                color = PrimaryBlue,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier
+                                    .padding(end = 12.dp)
+                                    .clickable {
+                                        val hasFine = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+                                        val hasCoarse = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+                                        if (hasFine || hasCoarse) {
+                                            // Check if GPS/network location is actually enabled
+                                            val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
+                                            val isGpsEnabled = locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)
+                                            val isNetworkEnabled = locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)
+
+                                            if (!isGpsEnabled && !isNetworkEnabled) {
+                                                showLocationOffDialog = true
+                                                return@clickable
+                                            }
+
+                                            locationLoading = true
+                                            try {
+                                                fusedLocationClient.getCurrentLocation(
+                                                    Priority.PRIORITY_HIGH_ACCURACY,
+                                                    CancellationTokenSource().token
+                                                ).addOnSuccessListener { loc ->
+                                                    if (loc != null) {
+                                                        latitude = loc.latitude
+                                                        longitude = loc.longitude
+                                                        scope.launch {
+                                                            try {
+                                                                val geo = RetrofitClient.instance.reverseGeocode(loc.latitude, loc.longitude)
+                                                                location = geo.displayName
+                                                            } catch (e: Exception) {
+                                                                location = "Lat: ${loc.latitude}, Lng: ${loc.longitude}"
+                                                            }
+                                                            locationLoading = false
+                                                        }
+                                                    } else {
+                                                        locationLoading = false
+                                                        // Try last known location as fallback
+                                                        fusedLocationClient.lastLocation.addOnSuccessListener { lastLoc ->
+                                                            if (lastLoc != null) {
+                                                                latitude = lastLoc.latitude
+                                                                longitude = lastLoc.longitude
+                                                                scope.launch {
+                                                                    try {
+                                                                        val geo = RetrofitClient.instance.reverseGeocode(lastLoc.latitude, lastLoc.longitude)
+                                                                        location = geo.displayName
+                                                                    } catch (e: Exception) {
+                                                                        location = "Lat: ${lastLoc.latitude}, Lng: ${lastLoc.longitude}"
+                                                                    }
+                                                                }
+                                                            } else {
+                                                                submitError = "Could not get location. Please ensure GPS is enabled and try again."
+                                                            }
+                                                        }
+                                                    }
+                                                }.addOnFailureListener {
+                                                    locationLoading = false
+                                                }
+                                            } catch (e: SecurityException) {
+                                                locationPermissionLauncher.launch(arrayOf(
+                                                    Manifest.permission.ACCESS_FINE_LOCATION,
+                                                    Manifest.permission.ACCESS_COARSE_LOCATION
+                                                ))
+                                            }
+                                        } else {
+                                            locationPermissionLauncher.launch(arrayOf(
+                                                Manifest.permission.ACCESS_FINE_LOCATION,
+                                                Manifest.permission.ACCESS_COARSE_LOCATION
+                                            ))
+                                        }
+                                    },
+                                fontSize = 12.sp
+                            )
+                        }
                     },
                     shape = RoundedCornerShape(12.dp),
                     colors = OutlinedTextFieldDefaults.colors(
@@ -232,6 +432,30 @@ fun ReportIssueScreen(
                         focusedTextColor = Color.Black
                     )
                 )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Pick on Map button
+                OutlinedButton(
+                    onClick = { showMapPicker = true },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Icon(Icons.Default.Map, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Pick on Map")
+                }
+
+                // Map preview when location is set
+                if (latitude != 0.0 && longitude != 0.0) {
+                    Spacer(Modifier.height(8.dp))
+                    MapViewCard(
+                        latitude = latitude,
+                        longitude = longitude,
+                        height = 150,
+                        onClick = { showMapPicker = true }
+                    )
+                }
 
                 Spacer(modifier = Modifier.height(24.dp))
 
@@ -317,21 +541,100 @@ fun ReportIssueScreen(
 
                 Spacer(modifier = Modifier.height(32.dp))
 
+                // Error message
+                if (submitError != null) {
+                    Text(
+                        text = submitError!!,
+                        color = Color.Red,
+                        fontSize = 13.sp,
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
+                }
+
                 // Submit Button
                 Button(
-                    onClick = { isSubmitted = true },
+                    onClick = {
+                        if (isSubmitting) return@Button
+                        isSubmitting = true
+                        submitError = null
+                        scope.launch {
+                            try {
+                                val api = RetrofitClient.instance
+                                // Build image parts
+                                val imageParts = mutableListOf<okhttp3.MultipartBody.Part>()
+                                capturedBitmap?.let { bmp ->
+                                    imageParts.add(bmp.toMultipartPart("images"))
+                                }
+                                if (imageParts.isEmpty() && selectedImageUri != null) {
+                                    imageParts.add(selectedImageUri!!.toMultipartPart(context, "images"))
+                                }
+
+                                val jsonData = Gson().toJson(mapOf(
+                                    "title" to description.take(100).ifEmpty { selectedCategory },
+                                    "description" to description,
+                                    "category" to selectedCategory,
+                                    "location_text" to location,
+                                    "latitude" to latitude,
+                                    "longitude" to longitude,
+                                    "severity_level" to detectedSeverity.ifEmpty { "MEDIUM" },
+                                    "priority" to if (detectedSeverity.equals("HIGH", true) || detectedSeverity.equals("CRITICAL", true)) "HIGH" else "MEDIUM",
+                                    "ai_detected_category" to detectedCategory,
+                                    "ai_confidence" to aiConfidence
+                                ))
+                                val dataBody = jsonData.toRequestBody("application/json".toMediaType())
+                                val result = api.createComplaint(imageParts, dataBody)
+                                submittedComplaintNumber = result.complaintNumber
+                                isSubmitted = true
+                            } catch (e: Exception) {
+                                submitError = e.message ?: "Submission failed"
+                                Log.e("ReportIssue", "Submit failed", e)
+                            } finally {
+                                isSubmitting = false
+                            }
+                        }
+                    },
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(56.dp),
                     shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue)
+                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue),
+                    enabled = !isSubmitting
                 ) {
-                    Text("Submit Complaint", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                    if (isSubmitting) {
+                        CircularProgressIndicator(color = Color.White, modifier = Modifier.size(24.dp))
+                    } else {
+                        Text("Submit Complaint", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(32.dp))
             }
         }
+    }
+
+    // Location Services Off Dialog
+    if (showLocationOffDialog) {
+        AlertDialog(
+            onDismissRequest = { showLocationOffDialog = false },
+            title = { Text("Location Required", color = Color.Black) },
+            text = { Text("Please enable location services to use the Locate Me feature.", color = Color.Black) },
+            confirmButton = {
+                TextButton(onClick = {
+                    showLocationOffDialog = false
+                    val intent = android.content.Intent(android.provider.Settings.ACTION_LOCATION_SOURCE_SETTINGS)
+                    context.startActivity(intent)
+                }) {
+                    Text("Open Settings", color = PrimaryBlue)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showLocationOffDialog = false }) {
+                    Text("Cancel", color = Color.DarkGray)
+                }
+            },
+            containerColor = Color.White,
+            shape = RoundedCornerShape(16.dp)
+        )
     }
 
     // AI Processing Overlay
@@ -358,6 +661,7 @@ fun ReportIssueScreen(
 
     // AI Severity Popup
     if (showSeverityPopup) {
+        val isHighSeverity = detectedSeverity.equals("HIGH", true) || detectedSeverity.equals("CRITICAL", true)
         AlertDialog(
             onDismissRequest = { showSeverityPopup = false },
             icon = { Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = Color(0xFF6200EE)) },
@@ -366,30 +670,48 @@ fun ReportIssueScreen(
                 Column {
                     Text("Based on the photo, AI has detected a potential issue.", color = Color.Black)
                     Spacer(modifier = Modifier.height(12.dp))
+                    if (detectedCategory.isNotEmpty()) {
+                        Text("Category: $detectedCategory", color = Color.Black, fontWeight = FontWeight.Medium, fontSize = 14.sp)
+                        Spacer(modifier = Modifier.height(4.dp))
+                    }
+                    if (aiConfidence > 0f) {
+                        Text("Confidence: ${"%.0f".format(aiConfidence * 100)}%", color = Color.DarkGray, fontSize = 13.sp)
+                        Spacer(modifier = Modifier.height(8.dp))
+                    }
                     Surface(
-                        color = if (detectedSeverity == "High") Color(0xFFFFEBEE) else Color(0xFFFFF3E0),
+                        color = if (isHighSeverity) Color(0xFFFFEBEE) else Color(0xFFFFF3E0),
                         shape = RoundedCornerShape(8.dp)
                     ) {
                         Row(modifier = Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
                             Icon(
-                                if (detectedSeverity == "High") Icons.Default.PriorityHigh else Icons.Default.Warning,
+                                if (isHighSeverity) Icons.Default.PriorityHigh else Icons.Default.Warning,
                                 contentDescription = null,
-                                tint = if (detectedSeverity == "High") Color.Red else Color(0xFFFFA000),
+                                tint = if (isHighSeverity) Color.Red else Color(0xFFFFA000),
                                 modifier = Modifier.size(16.dp)
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
                                 "Detected Severity: $detectedSeverity",
                                 fontWeight = FontWeight.Bold,
-                                color = if (detectedSeverity == "High") Color.Red else Color(0xFFE65100),
+                                color = if (isHighSeverity) Color.Red else Color(0xFFE65100),
                                 fontSize = 14.sp
                             )
                         }
                     }
+                    if (aiDescriptionSuggestion.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text("Suggested description:", fontSize = 12.sp, color = Color.DarkGray, fontWeight = FontWeight.Medium)
+                        Text(aiDescriptionSuggestion, fontSize = 13.sp, color = Color.Black)
+                    }
                 }
             },
             confirmButton = {
-                Button(onClick = { showSeverityPopup = false }) {
+                Button(onClick = {
+                    showSeverityPopup = false
+                    if (description.isEmpty() && aiDescriptionSuggestion.isNotEmpty()) {
+                        description = aiDescriptionSuggestion
+                    }
+                }) {
                     Text("Confirm")
                 }
             },
@@ -400,53 +722,23 @@ fun ReportIssueScreen(
 
     // Map Picker Dialog
     if (showMapPicker) {
-        androidx.compose.ui.window.Dialog(onDismissRequest = { showMapPicker = false }) {
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(450.dp),
-                shape = RoundedCornerShape(24.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.White)
-            ) {
-                Column(modifier = Modifier.fillMaxSize()) {
-                    Box(modifier = Modifier.weight(1f).fillMaxWidth().background(Color(0xFFE3F2FD))) {
-                        // Mock Map background
-                        Column(
-                            modifier = Modifier.fillMaxSize(),
-                            verticalArrangement = Arrangement.Center,
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Icon(Icons.Default.LocationOn, contentDescription = null, tint = Color.Red, modifier = Modifier.size(48.dp))
-                            Text("Mock Map View", color = PrimaryBlue)
-                        }
-                    }
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Text("Current Pin Location", fontWeight = FontWeight.Bold, color = Color.Black)
-                        Text("12-4/A, Jubilee Hills Rd No 36, Hyderabad", fontSize = 13.sp, color = Color.DarkGray)
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Button(
-                            onClick = {
-                                location = "12-4/A, Jubilee Hills Rd No 36, Hyderabad"
-                                showMapPicker = false
-                            },
-                            modifier = Modifier.fillMaxWidth().height(48.dp),
-                            shape = RoundedCornerShape(12.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue)
-                        ) {
-                            Text("Tag This Location")
-                        }
-                        TextButton(onClick = { showMapPicker = false }, modifier = Modifier.fillMaxWidth()) {
-                            Text("Cancel", color = Color.DarkGray)
-                        }
-                    }
-                }
-            }
-        }
+        MapLocationPicker(
+            initialLat = if (latitude != 0.0) latitude else 17.385,
+            initialLng = if (longitude != 0.0) longitude else 78.4867,
+            onLocationSelected = { lat, lng, address ->
+                latitude = lat
+                longitude = lng
+                location = address
+                showMapPicker = false
+            },
+            onDismiss = { showMapPicker = false }
+        )
     }
 }
 
 @Composable
 fun SuccessView(
+    complaintNumber: String = "",
     onBackToHome: () -> Unit,
     onTrackStatus: () -> Unit
 ) {
@@ -484,7 +776,7 @@ fun SuccessView(
         )
         
         Text(
-            "Your report #CE-112 has been registered. You can track its progress below.",
+            "Your report ${if (complaintNumber.isNotEmpty()) "#$complaintNumber" else ""} has been registered. You can track its progress below.",
             fontSize = 14.sp,
             color = Color.DarkGray,
             textAlign = TextAlign.Center,

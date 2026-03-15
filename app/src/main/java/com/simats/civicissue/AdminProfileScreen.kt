@@ -38,6 +38,17 @@ fun AdminProfileScreen(
     onLogoutClick: () -> Unit = {}
 ) {
     var showLogoutDialog by remember { mutableStateOf(false) }
+    var profile by remember { mutableStateOf(TokenManager.getUser()) }
+    var isLoading by remember { mutableStateOf(true) }
+
+    LaunchedEffect(Unit) {
+        try {
+            profile = RetrofitClient.instance.getProfile()
+        } catch (_: Exception) {
+            // fallback to TokenManager user
+        }
+        finally { isLoading = false }
+    }
 
     if (showLogoutDialog) {
         AlertDialog(
@@ -57,6 +68,7 @@ fun AdminProfileScreen(
                 TextButton(
                     onClick = {
                         showLogoutDialog = false
+                        TokenManager.clear()
                         onLogoutClick()
                     }
                 ) {
@@ -132,14 +144,14 @@ fun AdminProfileScreen(
                 Spacer(modifier = Modifier.height(16.dp))
                 
                 Text(
-                    text = "Vastr Simats",
+                    text = profile?.full_name ?: "Admin",
                     fontSize = 22.sp,
                     fontWeight = FontWeight.Bold,
                     color = Color.Black
                 )
-                
+
                 Text(
-                    text = "System Administrator",
+                    text = profile?.role?.replaceFirstChar { it.uppercase() } ?: "System Administrator",
                     fontSize = 14.sp,
                     color = Color.Gray
                 )
@@ -150,9 +162,9 @@ fun AdminProfileScreen(
             item {
                 ProfileSectionCard(title = "Personal Information") {
                     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                        ProfileInfoRow(icon = Icons.Default.Badge, label = "Admin ID", value = "ADM-2024-001")
-                        ProfileInfoRow(icon = Icons.Default.Email, label = "Email", value = "vastr@civiceye.gov")
-                        ProfileInfoRow(icon = Icons.Default.Phone, label = "Phone", value = "+1 987 654 3210")
+                        ProfileInfoRow(icon = Icons.Default.Badge, label = "Admin ID", value = profile?.id ?: "N/A")
+                        ProfileInfoRow(icon = Icons.Default.Email, label = "Email", value = profile?.email ?: "N/A")
+                        ProfileInfoRow(icon = Icons.Default.Phone, label = "Phone", value = profile?.phone_number ?: "N/A")
                     }
                 }
             }

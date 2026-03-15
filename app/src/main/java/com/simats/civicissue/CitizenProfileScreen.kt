@@ -1,5 +1,6 @@
 package com.simats.civicissue
 
+import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -27,12 +28,27 @@ import com.simats.civicissue.ui.theme.PrimaryBlue
 fun CitizenProfileScreen(
     onBack: () -> Unit = {},
     onHomeClick: () -> Unit = {},
+    onReportClick: () -> Unit = {},
     onIssuesClick: () -> Unit = {},
     onEditProfile: () -> Unit = {},
     onChangePassword: () -> Unit = {},
     onLogoutClick: () -> Unit = {}
 ) {
     var showLogoutDialog by remember { mutableStateOf(false) }
+    var profile by remember { mutableStateOf(TokenManager.getUser()) }
+    var isLoading by remember { mutableStateOf(true) }
+
+    LaunchedEffect(Unit) {
+        try {
+            val fetched = RetrofitClient.instance.getProfile()
+            profile = fetched
+            TokenManager.saveUser(fetched)
+        } catch (e: Exception) {
+            Log.e("Profile", "Failed to fetch profile: ${e.message}")
+        } finally {
+            isLoading = false
+        }
+    }
 
     if (showLogoutDialog) {
         AlertDialog(
@@ -100,9 +116,23 @@ fun CitizenProfileScreen(
                 NavigationBarItem(
                     selected = false,
                     onClick = onHomeClick,
-                    icon = { Icon(Icons.Default.Home, contentDescription = "Home") },
-                    label = { Text("Home", fontSize = 12.sp) },
+                    icon = { Icon(Icons.Filled.Home, contentDescription = "Home") },
+                    label = { Text("Home", fontSize = 11.sp) },
                     colors = NavigationBarItemDefaults.colors(
+                        selectedIconColor = PrimaryBlue,
+                        selectedTextColor = PrimaryBlue,
+                        unselectedIconColor = Color.Gray,
+                        unselectedTextColor = Color.Gray
+                    )
+                )
+                NavigationBarItem(
+                    selected = false,
+                    onClick = onReportClick,
+                    icon = { Icon(Icons.Filled.AddCircle, contentDescription = "Report") },
+                    label = { Text("Report", fontSize = 11.sp) },
+                    colors = NavigationBarItemDefaults.colors(
+                        selectedIconColor = PrimaryBlue,
+                        selectedTextColor = PrimaryBlue,
                         unselectedIconColor = Color.Gray,
                         unselectedTextColor = Color.Gray
                     )
@@ -110,9 +140,11 @@ fun CitizenProfileScreen(
                 NavigationBarItem(
                     selected = false,
                     onClick = onIssuesClick,
-                    icon = { Icon(Icons.Default.ListAlt, contentDescription = "Issues") },
-                    label = { Text("Issues", fontSize = 12.sp) },
+                    icon = { Icon(Icons.Filled.Assignment, contentDescription = "Issues") },
+                    label = { Text("Issues", fontSize = 11.sp) },
                     colors = NavigationBarItemDefaults.colors(
+                        selectedIconColor = PrimaryBlue,
+                        selectedTextColor = PrimaryBlue,
                         unselectedIconColor = Color.Gray,
                         unselectedTextColor = Color.Gray
                     )
@@ -120,11 +152,13 @@ fun CitizenProfileScreen(
                 NavigationBarItem(
                     selected = true,
                     onClick = { /* Already on Profile */ },
-                    icon = { Icon(Icons.Default.Person, contentDescription = "Profile") },
-                    label = { Text("Profile", fontSize = 12.sp) },
+                    icon = { Icon(Icons.Filled.Person, contentDescription = "Profile") },
+                    label = { Text("Profile", fontSize = 11.sp) },
                     colors = NavigationBarItemDefaults.colors(
                         selectedIconColor = PrimaryBlue,
                         selectedTextColor = PrimaryBlue,
+                        unselectedIconColor = Color.Gray,
+                        unselectedTextColor = Color.Gray,
                         indicatorColor = PrimaryBlue.copy(alpha = 0.1f)
                     )
                 )
@@ -159,24 +193,26 @@ fun CitizenProfileScreen(
             Spacer(modifier = Modifier.height(16.dp))
             
             Text(
-                text = "Citizen Vastr",
+                text = profile?.full_name ?: "Loading...",
                 fontSize = 22.sp,
                 fontWeight = FontWeight.Bold,
                 color = Color.Black
             )
             
-            Surface(
-                color = Color(0xFFE8F5E9),
-                shape = RoundedCornerShape(20.dp),
-                modifier = Modifier.padding(top = 8.dp)
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically
+            if (profile?.is_verified == true) {
+                Surface(
+                    color = Color(0xFFE8F5E9),
+                    shape = RoundedCornerShape(20.dp),
+                    modifier = Modifier.padding(top = 8.dp)
                 ) {
-                    Icon(Icons.Default.Verified, contentDescription = null, tint = Color(0xFF4CAF50), modifier = Modifier.size(14.dp))
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("Verified Citizen", color = Color(0xFF4CAF50), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Default.Verified, contentDescription = null, tint = Color(0xFF4CAF50), modifier = Modifier.size(14.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Verified Citizen", color = Color(0xFF4CAF50), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
                 }
             }
 
@@ -186,9 +222,9 @@ fun CitizenProfileScreen(
             Spacer(modifier = Modifier.height(32.dp))
 
             // Info Fields
-            ProfileInfoItem(label = "Full Name", value = "Citizen Vastr", icon = Icons.Default.Person)
-            ProfileInfoItem(label = "Email Address", value = "vastr@citizen.com", icon = Icons.Default.Email)
-            ProfileInfoItem(label = "Phone Number", value = "+91 98765 43210", icon = Icons.Default.Phone)
+            ProfileInfoItem(label = "Full Name", value = profile?.full_name ?: "--", icon = Icons.Default.Person)
+            ProfileInfoItem(label = "Email Address", value = profile?.email ?: "--", icon = Icons.Default.Email)
+            ProfileInfoItem(label = "Phone Number", value = "${profile?.country_code ?: ""} ${profile?.phone_number ?: "--"}".trim(), icon = Icons.Default.Phone)
 
             Spacer(modifier = Modifier.height(24.dp))
 

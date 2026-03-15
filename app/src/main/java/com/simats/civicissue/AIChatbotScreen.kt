@@ -26,7 +26,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.simats.civicissue.ui.theme.PrimaryBlue
 import com.simats.civicissue.ui.theme.BackgroundBlue
-import kotlinx.coroutines.delay
+import android.util.Log
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
@@ -44,7 +48,9 @@ fun AIChatbotScreen(
     onBack: () -> Unit = {}
 ) {
     var inputText by remember { mutableStateOf("") }
-    val messages = remember { 
+    var sessionId by remember { mutableStateOf<String?>(null) }
+    var isSending by remember { mutableStateOf(false) }
+    val messages = remember {
         mutableStateListOf(
             ChatMessage(text = "Hello! I'm your AI Civic Assistant. How can I help you today?", isUser = false),
             ChatMessage(text = "You can report issues like potholes, streetlights, or check your complaint status.", isUser = false)
@@ -157,13 +163,6 @@ fun AIChatbotScreen(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    IconButton(onClick = { /* Image picker */ }) {
-                        Icon(Icons.Default.Image, contentDescription = "Attach", tint = Color.Gray)
-                    }
-                    IconButton(onClick = { /* Voice input */ }) {
-                        Icon(Icons.Default.Mic, contentDescription = "Voice", tint = Color.Gray)
-                    }
-                    
                     OutlinedTextField(
                         value = inputText,
                         onValueChange = { inputText = it },
@@ -188,23 +187,36 @@ fun AIChatbotScreen(
                             .size(48.dp)
                             .clip(CircleShape)
                             .clickable {
-                                if (inputText.isNotBlank()) {
+                                if (inputText.isNotBlank() && !isSending) {
                                     val currentText = inputText
                                     messages.add(ChatMessage(text = currentText, isUser = true))
                                     inputText = ""
+                                    isSending = true
                                     coroutineScope.launch {
                                         listState.animateScrollToItem(messages.size - 1)
-                                        delay(1000)
-                                        val response = getBotResponse(currentText)
-                                        messages.add(ChatMessage(text = response, isUser = false))
+                                        try {
+                                            val api = RetrofitClient.instance
+                                            val chatResponse = api.chat(ChatRequest(message = currentText, session_id = sessionId))
+                                            sessionId = chatResponse.session_id
+                                            messages.add(ChatMessage(text = chatResponse.response, isUser = false))
+                                        } catch (e: Exception) {
+                                            Log.e("AIChatbot", "Chat failed: ${e.message}")
+                                            messages.add(ChatMessage(text = "Sorry, I couldn't process that. Please try again.", isUser = false))
+                                        } finally {
+                                            isSending = false
+                                        }
                                         listState.animateScrollToItem(messages.size - 1)
                                     }
                                 }
                             },
-                        color = PrimaryBlue
+                        color = if (isSending) Color.Gray else PrimaryBlue
                     ) {
                         Box(contentAlignment = Alignment.Center) {
-                            Icon(imageVector = Icons.AutoMirrored.Filled.Send, contentDescription = "Send", tint = Color.White)
+                            if (isSending) {
+                                CircularProgressIndicator(color = Color.White, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                            } else {
+                                Icon(imageVector = Icons.AutoMirrored.Filled.Send, contentDescription = "Send", tint = Color.White)
+                            }
                         }
                     }
                 }
@@ -230,12 +242,22 @@ fun ChatBubble(message: ChatMessage) {
             tonalElevation = 1.dp,
             shadowElevation = 1.dp
         ) {
-            Text(
-                text = message.text,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
-                color = if (message.isUser) Color.White else Color.Black,
-                fontSize = 15.sp
-            )
+            val textColor = if (message.isUser) Color.White else Color.Black
+            if (message.isUser) {
+                Text(
+                    text = message.text,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                    color = textColor,
+                    fontSize = 15.sp
+                )
+            } else {
+                Text(
+                    text = formatMarkdownText(message.text, textColor),
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                    fontSize = 15.sp,
+                    lineHeight = 22.sp
+                )
+            }
         }
         Text(
             text = message.timestamp,
@@ -243,6 +265,44 @@ fun ChatBubble(message: ChatMessage) {
             color = Color.Gray,
             modifier = Modifier.padding(top = 4.dp, start = 4.dp, end = 4.dp)
         )
+    }
+}
+
+fun formatMarkdownText(text: String, defaultColor: Color): AnnotatedString {
+    // First, normalize newlines: replace literal \n with actual newlines
+    val normalized = text.replace("\\n", "\n")
+
+    return buildAnnotatedString {
+        var i = 0
+        while (i < normalized.length) {
+            when {
+                // Bold: **text**
+                i + 1 < normalized.length && normalized[i] == '*' && normalized[i + 1] == '*' -> {
+                    val endIndex = normalized.indexOf("**", i + 2)
+                    if (endIndex != -1) {
+                        withStyle(SpanStyle(fontWeight = FontWeight.Bold, color = defaultColor)) {
+                            append(normalized.substring(i + 2, endIndex))
+                        }
+                        i = endIndex + 2
+                    } else {
+                        append(normalized[i])
+                        i++
+                    }
+                }
+                // Bullet point: * at start of line (after newline or at position 0)
+                normalized[i] == '*' && normalized.getOrNull(i + 1) == ' ' &&
+                        (i == 0 || normalized[i - 1] == '\n') -> {
+                    append("  \u2022 ")
+                    i += 2 // skip "* "
+                }
+                else -> {
+                    withStyle(SpanStyle(color = defaultColor)) {
+                        append(normalized[i])
+                    }
+                    i++
+                }
+            }
+        }
     }
 }
 
@@ -265,14 +325,4 @@ fun SuggestionChip(label: String, icon: ImageVector, onClick: () -> Unit) {
     }
 }
 
-private fun getBotResponse(input: String): String {
-    val lowerInput = input.lowercase()
-    return when {
-        lowerInput.contains("pothole") -> "I can help you report that pothole. Please provide the location or attach a photo."
-        lowerInput.contains("status") -> "To check your status, please provide your Complaint ID (e.g., CE-1234)."
-        lowerInput.contains("garbage") -> "Our waste management team can be notified. Should I create a report for your current location?"
-        lowerInput.contains("streetlight") -> "I've noted the streetlight issue. Lighting issues are usually resolved within 48 hours."
-        lowerInput.contains("thank") -> "You're welcome! I'm here to make our city better together."
-        else -> "I understand you're asking about '$input'. How can I specifically assist you with this civic matter?"
-    }
-}
+// getBotResponse removed - now using real API via RetrofitClient.instance.chat()

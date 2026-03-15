@@ -26,6 +26,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.simats.civicissue.ui.theme.*
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -39,6 +40,9 @@ fun SignUpScreen(onBack: () -> Unit, onVerifyAccount: () -> Unit, onLogin: () ->
     var confirmPasswordVisible by remember { mutableStateOf(false) }
     var selectedCountryCode by remember { mutableStateOf("+91") }
     var countryCodeExpanded by remember { mutableStateOf(false) }
+    var isLoading by remember { mutableStateOf(false) }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
 
     val countryCodes = listOf(
         "+91" to "India", "+1" to "USA/Canada", "+44" to "UK", "+61" to "Australia", 
@@ -60,37 +64,30 @@ fun SignUpScreen(onBack: () -> Unit, onVerifyAccount: () -> Unit, onLogin: () ->
         "+260" to "Zambia", "+263" to "Zimbabwe"
     ).sortedBy { it.second }
 
-    Surface(
-        modifier = Modifier.fillMaxSize(),
-        color = BackgroundBlue
-    ) {
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Create Account", fontWeight = FontWeight.Bold) },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = Color(0xFFF0F4FF),
+                    titleContentColor = Color.Black,
+                    navigationIconContentColor = Color.Black
+                )
+            )
+        },
+        containerColor = Color(0xFFF0F4FF)
+    ) { paddingValues ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .padding(paddingValues)
                 .verticalScroll(rememberScrollState())
         ) {
-            // Top Bar
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                IconButton(onClick = onBack) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowBack, 
-                        contentDescription = "Back", 
-                        tint = Color.Black
-                    )
-                }
-                Text(
-                    text = "Create Account",
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.Black
-                )
-            }
-
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -98,7 +95,7 @@ fun SignUpScreen(onBack: () -> Unit, onVerifyAccount: () -> Unit, onLogin: () ->
                 horizontalAlignment = Alignment.Start
             ) {
                 Text(
-                    text = "Join CivicEye",
+                    text = "Join CivicIssue",
                     fontSize = 32.sp,
                     fontWeight = FontWeight.Bold,
                     color = Color.Black
@@ -237,17 +234,77 @@ fun SignUpScreen(onBack: () -> Unit, onVerifyAccount: () -> Unit, onLogin: () ->
                     }
                 }
 
-                Spacer(modifier = Modifier.height(48.dp))
+                Spacer(modifier = Modifier.height(16.dp))
+
+                if (errorMessage != null) {
+                    Text(
+                        text = errorMessage!!,
+                        color = Color.Red,
+                        fontSize = 14.sp,
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
 
                 Button(
-                    onClick = onVerifyAccount,
+                    onClick = {
+                        // Client-side validation
+                        if (password != confirmPassword) {
+                            errorMessage = "Passwords do not match"
+                            return@Button
+                        }
+                        if (fullName.isBlank() || email.isBlank() || password.isBlank()) {
+                            errorMessage = "Please fill in all required fields"
+                            return@Button
+                        }
+                        scope.launch {
+                            isLoading = true
+                            errorMessage = null
+                            try {
+                                val response = RetrofitClient.instance.signup(
+                                    SignupRequest(
+                                        full_name = fullName.trim(),
+                                        email = email.trim(),
+                                        password = password,
+                                        phone_number = if (phoneNumber.isNotBlank()) phoneNumber.trim() else null,
+                                        country_code = selectedCountryCode,
+                                        role = "citizen"
+                                    )
+                                )
+                                TokenManager.saveToken(response.access_token)
+                                TokenManager.saveUser(response.user)
+                                TokenManager.pendingEmail = email.trim()
+                                onVerifyAccount()
+                            } catch (e: retrofit2.HttpException) {
+                                errorMessage = when (e.code()) {
+                                    409 -> "Email already exists"
+                                    422 -> "Invalid input. Please check your details."
+                                    else -> "Signup failed: ${e.message()}"
+                                }
+                            } catch (e: Exception) {
+                                errorMessage = e.message ?: "Something went wrong"
+                            } finally {
+                                isLoading = false
+                            }
+                        }
+                    },
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(56.dp),
                     shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue)
+                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue),
+                    enabled = !isLoading
                 ) {
-                    Text("Continue", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                    if (isLoading) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(24.dp),
+                            color = Color.White,
+                            strokeWidth = 2.dp
+                        )
+                    } else {
+                        Text("Continue", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(32.dp))

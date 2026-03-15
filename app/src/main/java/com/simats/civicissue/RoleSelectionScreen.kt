@@ -1,7 +1,9 @@
 package com.simats.civicissue
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -15,6 +17,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
@@ -31,18 +34,23 @@ fun RoleSelectionScreen(onRoleSelected: (String) -> Unit) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .statusBarsPadding()
                 .padding(24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Spacer(modifier = Modifier.height(40.dp))
 
-            // Eye Logo
-            EyeLogo()
+            // App Logo
+            Image(
+                painter = painterResource(id = R.drawable.app_logo),
+                contentDescription = "CivicIssue Logo",
+                modifier = Modifier.size(120.dp)
+            )
 
             Spacer(modifier = Modifier.height(16.dp))
 
             Text(
-                text = "CivicEye",
+                text = "CivicIssue",
                 fontSize = 28.sp,
                 fontWeight = FontWeight.Bold,
                 color = Color.Black
@@ -67,7 +75,7 @@ fun RoleSelectionScreen(onRoleSelected: (String) -> Unit) {
             Spacer(modifier = Modifier.height(8.dp))
 
             Text(
-                text = "Choose how you will use CivicEye to\nimprove your community.",
+                text = "Choose how you will use CivicIssue to\nimprove your community.",
                 fontSize = 16.sp,
                 color = Color.Gray,
                 textAlign = TextAlign.Center
@@ -90,33 +98,6 @@ fun RoleSelectionScreen(onRoleSelected: (String) -> Unit) {
                 description = "Manage and resolve reported civic\nissues.=",
                 icon = Icons.Default.Shield,
                 onClick = { onRoleSelected("Admin") }
-            )
-        }
-    }
-}
-
-@Composable
-fun EyeLogo() {
-    Box(
-        modifier = Modifier
-            .size(60.dp)
-            .clip(CircleShape)
-            .background(PrimaryBlue),
-        contentAlignment = Alignment.Center
-    ) {
-        // Simple Eye Icon Representation
-        Box(
-            modifier = Modifier
-                .size(34.dp)
-                .clip(CircleShape)
-                .background(Color.White),
-            contentAlignment = Alignment.Center
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(18.dp)
-                    .clip(CircleShape)
-                    .background(PrimaryBlue)
             )
         }
     }

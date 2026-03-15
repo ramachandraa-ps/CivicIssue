@@ -11,7 +11,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -55,32 +55,48 @@ fun IssueHistoryScreen(
         },
         containerColor = Color(0xFFF8F9FE)
     ) { paddingValues ->
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            item {
-                Text(
-                    "Past Civic Reports",
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color(0xFF333333),
-                    modifier = Modifier.padding(bottom = 8.dp)
-                )
-            }
+        var complaints by remember { mutableStateOf<List<Complaint>>(emptyList()) }
+        var isLoading by remember { mutableStateOf(true) }
 
-            items(historyComplaints) { complaint ->
-                HistoryComplaintCard(complaint = complaint)
+        LaunchedEffect(Unit) {
+            try {
+                complaints = RetrofitClient.instance.getComplaints().items
+            } catch (_: Exception) { }
+            finally { isLoading = false }
+        }
+
+        if (isLoading) {
+            Box(modifier = Modifier.fillMaxSize().padding(paddingValues), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(color = PrimaryBlue)
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues)
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                item {
+                    Text(
+                        "Past Civic Reports",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF333333),
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
+                }
+
+                items(complaints) { complaint ->
+                    HistoryApiComplaintCard(complaint = complaint)
+                }
             }
         }
     }
 }
 
 @Composable
-fun HistoryComplaintCard(complaint: Complaint) {
+fun HistoryApiComplaintCard(complaint: Complaint) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
@@ -95,15 +111,15 @@ fun HistoryComplaintCard(complaint: Complaint) {
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        complaint.id,
+                        complaint.complaintNumber.ifEmpty { complaint.id },
                         fontSize = 12.sp,
                         color = PrimaryBlue,
                         fontWeight = FontWeight.Bold
                     )
                     Spacer(modifier = Modifier.width(8.dp))
-                    StatusBadge(complaint.status)
+                    StatusBadge(complaint.statusLabel)
                 }
-                PriorityBadge(complaint.priority)
+                PriorityTag(complaint.priority)
             }
 
             Spacer(modifier = Modifier.height(12.dp))
@@ -143,7 +159,7 @@ fun HistoryComplaintCard(complaint: Complaint) {
                 )
                 Spacer(modifier = Modifier.width(4.dp))
                 Text(
-                    text = complaint.location,
+                    text = complaint.locationText ?: "N/A",
                     fontSize = 13.sp,
                     color = Color.Gray
                 )
@@ -165,13 +181,13 @@ fun HistoryComplaintCard(complaint: Complaint) {
                     )
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(
-                        text = complaint.dateTime,
+                        text = complaint.createdAt ?: "",
                         fontSize = 11.sp,
                         color = Color.LightGray
                     )
                 }
-                
-                if (complaint.officerName != null) {
+
+                if (complaint.assignedOfficerName != null) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(
                             Icons.Default.Engineering,
@@ -181,7 +197,7 @@ fun HistoryComplaintCard(complaint: Complaint) {
                         )
                         Spacer(modifier = Modifier.width(4.dp))
                         Text(
-                            text = "Resolved by: ${complaint.officerName}",
+                            text = "Assigned to: ${complaint.assignedOfficerName}",
                             fontSize = 11.sp,
                             color = PrimaryBlue,
                             fontWeight = FontWeight.Medium
@@ -192,51 +208,3 @@ fun HistoryComplaintCard(complaint: Complaint) {
         }
     }
 }
-
-// Mock Data for History
-val historyComplaints = listOf(
-    Complaint(
-        id = "#CE-085",
-        citizenName = "Arjun Reddy",
-        title = "Water Leakage at MG Road",
-        category = "Water",
-        location = "MG Road, Near Metro Station",
-        dateTime = "Feb 20, 2026 • 10:15 AM",
-        priority = Priority.HIGH,
-        status = ComplaintStatus.RESOLVED,
-        officerName = "Amit Kumar"
-    ),
-    Complaint(
-        id = "#CE-072",
-        citizenName = "Lakshmi Devi",
-        title = "Street Light Repair",
-        category = "Electricity",
-        location = "Anna Nagar, 4th Street",
-        dateTime = "Jan 15, 2026 • 08:45 PM",
-        priority = Priority.LOW,
-        status = ComplaintStatus.COMPLETED,
-        officerName = "Sneha Rao"
-    ),
-    Complaint(
-        id = "#CE-064",
-        citizenName = "Karthik Raja",
-        title = "Garbage Collection Delay",
-        category = "Sanitation",
-        location = "Velachery, Main Road",
-        dateTime = "Dec 10, 2025 • 09:00 AM",
-        priority = Priority.MEDIUM,
-        status = ComplaintStatus.RESOLVED,
-        officerName = "Zoya Khan"
-    ),
-    Complaint(
-        id = "#CE-051",
-        citizenName = "Meera Nair",
-        title = "Sewage Overflow",
-        category = "Drainage",
-        location = "Adyar Circle",
-        dateTime = "Nov 05, 2025 • 11:30 AM",
-        priority = Priority.HIGH,
-        status = ComplaintStatus.COMPLETED,
-        officerName = "Vikram Singh"
-    )
-)

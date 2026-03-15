@@ -11,7 +11,7 @@ import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.PieChart
 import androidx.compose.material.icons.filled.Timeline
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -21,8 +21,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.simats.civicissue.ui.theme.CivicIssueTheme
-import com.simats.civicissue.ui.theme.PrimaryBlue
+import com.simats.civicissue.ui.theme.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -56,64 +55,115 @@ fun AnalyticsScreen(
                 )
             )
         },
-        containerColor = Color(0xFFF5F7FA)
+        containerColor = BackgroundLight
     ) { paddingValues ->
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-                .padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-            contentPadding = PaddingValues(vertical = 16.dp)
-        ) {
-            item {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    AnalyticsMetricCard(
-                        modifier = Modifier.weight(1f),
-                        label = "Total Reports",
-                        value = "1,284",
-                        icon = Icons.Default.BarChart,
-                        color = PrimaryBlue
-                    )
-                    AnalyticsMetricCard(
-                        modifier = Modifier.weight(1f),
-                        label = "Resolution Rate",
-                        value = "84%",
-                        icon = Icons.Default.Timeline,
-                        color = Color(0xFF4CAF50)
+        var stats by remember { mutableStateOf<DashboardStats?>(null) }
+        var isLoading by remember { mutableStateOf(true) }
+
+        LaunchedEffect(Unit) {
+            try {
+                stats = RetrofitClient.instance.getDashboardStats()
+            } catch (_: Exception) { }
+            finally { isLoading = false }
+        }
+
+        if (isLoading) {
+            Box(modifier = Modifier.fillMaxSize().padding(paddingValues), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(color = PrimaryBlue)
+            }
+        } else {
+            val s = stats
+            val total = (s?.totalComplaints ?: 1).coerceAtLeast(1)
+            val categoryColors = listOf(PrimaryBlue, Color(0xFF673AB7), Color(0xFFFFA000), Color(0xFF4CAF50), Color.Gray, Color(0xFF2196F3), Color(0xFFD32F2F), Color(0xFF009688))
+
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues)
+                    .padding(horizontal = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+                contentPadding = PaddingValues(vertical = 16.dp)
+            ) {
+                item {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        AnalyticsMetricCard(
+                            modifier = Modifier.weight(1f),
+                            label = "Total Reports",
+                            value = "${s?.totalComplaints ?: 0}",
+                            icon = Icons.Default.BarChart,
+                            color = PrimaryBlue
+                        )
+                        AnalyticsMetricCard(
+                            modifier = Modifier.weight(1f),
+                            label = "Resolution Rate",
+                            value = "${"%.0f".format((s?.resolutionRate ?: 0f) * 100)}%",
+                            icon = Icons.Default.Timeline,
+                            color = Color(0xFF4CAF50)
+                        )
+                    }
+                }
+
+                item {
+                    AnalyticsSectionCard(
+                        title = "Category Distribution",
+                        content = {
+                            Column {
+                                val categoryEntries = s?.byCategory?.entries?.toList() ?: emptyList()
+                                if (categoryEntries.isEmpty()) {
+                                    Text("No category data available", color = Color.Gray, fontSize = 14.sp)
+                                } else {
+                                    categoryEntries.forEachIndexed { index, (name, count) ->
+                                        val percentage = count.toFloat() / total
+                                        CategoryRow(
+                                            name = name,
+                                            percentage = percentage,
+                                            color = categoryColors[index % categoryColors.size]
+                                        )
+                                    }
+                                }
+                            }
+                        }
                     )
                 }
-            }
 
-            item {
-                AnalyticsSectionCard(
-                    title = "Category Distribution",
-                    content = {
-                        Column {
-                            CategoryRow(name = "Road & Infra", percentage = 0.35f, color = PrimaryBlue)
-                            CategoryRow(name = "Waste & Sanitation", percentage = 0.25f, color = Color(0xFF673AB7))
-                            CategoryRow(name = "Street Lighting", percentage = 0.20f, color = Color(0xFFFFA000))
-                            CategoryRow(name = "Public Services", percentage = 0.15f, color = Color(0xFF4CAF50))
-                            CategoryRow(name = "Others", percentage = 0.05f, color = Color.Gray)
+                item {
+                    AnalyticsSectionCard(
+                        title = "Severity Distribution",
+                        content = {
+                            Column {
+                                val severityEntries = s?.bySeverity?.entries?.toList() ?: emptyList()
+                                if (severityEntries.isEmpty()) {
+                                    Text("No severity data available", color = Color.Gray, fontSize = 14.sp)
+                                } else {
+                                    severityEntries.forEachIndexed { index, (name, count) ->
+                                        val percentage = count.toFloat() / total
+                                        CategoryRow(
+                                            name = name,
+                                            percentage = percentage,
+                                            color = categoryColors[index % categoryColors.size]
+                                        )
+                                    }
+                                }
+                            }
                         }
-                    }
-                )
-            }
+                    )
+                }
 
-            item {
-                AnalyticsSectionCard(
-                    title = "Performance Overview",
-                    content = {
-                        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                            PerformanceItem(label = "Avg. Response Time", value = "2.4 Hours")
-                            PerformanceItem(label = "Avg. Resolution Time", value = "1.5 Days")
-                            PerformanceItem(label = "User Satisfaction", value = "4.2 / 5")
+                item {
+                    AnalyticsSectionCard(
+                        title = "Performance Overview",
+                        content = {
+                            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                PerformanceItem(label = "Recent 7 Days", value = "${s?.recent7Days ?: 0} complaints")
+                                PerformanceItem(label = "Total Officers", value = "${s?.totalOfficers ?: 0}")
+                                PerformanceItem(label = "Total Citizens", value = "${s?.totalCitizens ?: 0}")
+                            }
                         }
-                    }
-                )
+                    )
+                }
             }
         }
     }

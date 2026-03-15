@@ -25,8 +25,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.simats.civicissue.ui.theme.CivicIssueTheme
-import com.simats.civicissue.ui.theme.PrimaryBlue
+import com.simats.civicissue.ui.theme.*
+import kotlinx.coroutines.async
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -43,10 +43,30 @@ fun AdminDashboardScreen(
     onHistoryClick: () -> Unit = {},
     onProfessionalDashboardClick: () -> Unit = {},
     onTaskClick: (String) -> Unit = {},
-    onAIChatClick: () -> Unit = {}
+    onAIChatClick: () -> Unit = {},
+    onAnalyticsClick: () -> Unit = {}
 ) {
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
+
+    var stats by remember { mutableStateOf<DashboardStats?>(null) }
+    var recentComplaints by remember { mutableStateOf<List<Complaint>>(emptyList()) }
+    var unreadCount by remember { mutableStateOf(0) }
+    var isLoading by remember { mutableStateOf(true) }
+    val userName = remember { TokenManager.getUser()?.full_name ?: "Admin" }
+
+    LaunchedEffect(Unit) {
+        try {
+            val api = RetrofitClient.instance
+            val statsDeferred = async { api.getDashboardStats() }
+            val complaintsDeferred = async { api.getComplaints(mapOf("page" to "1", "limit" to "5")) }
+            val unreadDeferred = async { api.getUnreadCount() }
+            stats = statsDeferred.await()
+            recentComplaints = complaintsDeferred.await().items
+            unreadCount = unreadDeferred.await().count
+        } catch (_: Exception) { }
+        finally { isLoading = false }
+    }
 
     ModalNavigationDrawer(
         drawerState = drawerState,
@@ -55,8 +75,11 @@ fun AdminDashboardScreen(
                 onItemSelected = { item ->
                     scope.launch { drawerState.close() }
                     when (item) {
-                        "Settings" -> onSettingsClick()
+                        "Dashboard" -> { /* Already on dashboard */ }
+                        "Reports" -> onReportsClick()
                         "History" -> onHistoryClick()
+                        "Analytics" -> onAnalyticsClick()
+                        "Settings" -> onSettingsClick()
                     }
                 },
                 onLogout = {
@@ -99,16 +122,17 @@ fun AdminDashboardScreen(
                                     tint = PrimaryBlue,
                                     modifier = Modifier.size(28.dp)
                                 )
-                                // Notification dot
-                                Surface(
-                                    modifier = Modifier
-                                        .size(10.dp)
-                                        .align(Alignment.TopEnd)
-                                        .offset(x = (-2).dp, y = 2.dp),
-                                    shape = CircleShape,
-                                    color = Color.Red,
-                                    border = BorderStroke(2.dp, Color.White)
-                                ) {}
+                                if (unreadCount > 0) {
+                                    Surface(
+                                        modifier = Modifier
+                                            .size(10.dp)
+                                            .align(Alignment.TopEnd)
+                                            .offset(x = (-2).dp, y = 2.dp),
+                                        shape = CircleShape,
+                                        color = Color.Red,
+                                        border = BorderStroke(2.dp, Color.White)
+                                    ) {}
+                                }
                             }
                         }
                     },
@@ -141,9 +165,9 @@ fun AdminDashboardScreen(
                 ) {
                     NavigationBarItem(
                         selected = true,
-                        onClick = { /* Already on Home */ },
-                        icon = { Icon(Icons.Default.Home, contentDescription = "Home") },
-                        label = { Text("Home", fontSize = 12.sp) },
+                        onClick = { /* Already on Dashboard */ },
+                        icon = { Icon(Icons.Default.Dashboard, contentDescription = "Dashboard") },
+                        label = { Text("Dashboard", fontSize = 12.sp) },
                         colors = NavigationBarItemDefaults.colors(
                             selectedIconColor = PrimaryBlue,
                             selectedTextColor = PrimaryBlue,
@@ -154,37 +178,37 @@ fun AdminDashboardScreen(
                     )
                     NavigationBarItem(
                         selected = false,
-                        onClick = onStatusClick,
-                        icon = { Icon(Icons.Default.AddBox, contentDescription = "Status") },
-                        label = { Text("Status", fontSize = 12.sp) },
-                        colors = NavigationBarItemDefaults.colors(
-                            unselectedIconColor = Color.LightGray,
-                            unselectedTextColor = Color.Gray
-                        )
-                    )
-                    NavigationBarItem(
-                        selected = false,
                         onClick = onReportsClick,
-                        icon = { Icon(Icons.AutoMirrored.Filled.Assignment, contentDescription = "Reports") },
-                        label = { Text("Reports", fontSize = 12.sp) },
+                        icon = { Icon(Icons.AutoMirrored.Filled.Assignment, contentDescription = "Complaints") },
+                        label = { Text("Complaints", fontSize = 12.sp) },
                         colors = NavigationBarItemDefaults.colors(
-                            unselectedIconColor = Color.LightGray,
+                            unselectedIconColor = Color.Gray,
                             unselectedTextColor = Color.Gray
                         )
                     )
                     NavigationBarItem(
                         selected = false,
-                        onClick = onProfileClick,
-                        icon = { Icon(Icons.Default.Person, contentDescription = "Profile") },
-                        label = { Text("Profile", fontSize = 12.sp) },
+                        onClick = onAnalyticsClick,
+                        icon = { Icon(Icons.Default.BarChart, contentDescription = "Analytics") },
+                        label = { Text("Analytics", fontSize = 12.sp) },
                         colors = NavigationBarItemDefaults.colors(
-                            unselectedIconColor = Color.LightGray,
+                            unselectedIconColor = Color.Gray,
+                            unselectedTextColor = Color.Gray
+                        )
+                    )
+                    NavigationBarItem(
+                        selected = false,
+                        onClick = onSettingsClick,
+                        icon = { Icon(Icons.Default.Settings, contentDescription = "Settings") },
+                        label = { Text("Settings", fontSize = 12.sp) },
+                        colors = NavigationBarItemDefaults.colors(
+                            unselectedIconColor = Color.Gray,
                             unselectedTextColor = Color.Gray
                         )
                     )
                 }
             },
-            containerColor = Color.White
+            containerColor = BackgroundLight
         ) { paddingValues ->
             LazyColumn(
                 modifier = Modifier
@@ -251,31 +275,37 @@ fun AdminDashboardScreen(
 
                 // Stats Section
                 item {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        StatCard(
-                            modifier = Modifier.weight(1f),
-                            label = "ASSIGNED",
-                            value = "12",
-                            valueColor = Color(0xFF3F51B5),
-                            onClick = onAssignedClick
-                        )
-                        StatCard(
-                            modifier = Modifier.weight(1f),
-                            label = "IN PROGRESS",
-                            value = "05",
-                            valueColor = Color(0xFFFFA000),
-                            onClick = onInProgressClick
-                        )
-                        StatCard(
-                            modifier = Modifier.weight(1f),
-                            label = "COMPLETED",
-                            value = "48",
-                            valueColor = Color(0xFF4CAF50),
-                            onClick = onCompletedClick
-                        )
+                    if (isLoading) {
+                        Box(modifier = Modifier.fillMaxWidth().height(110.dp), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator(color = PrimaryBlue)
+                        }
+                    } else {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            StatCard(
+                                modifier = Modifier.weight(1f),
+                                label = "ASSIGNED",
+                                value = (stats?.assigned ?: 0).toString().padStart(2, '0'),
+                                valueColor = Color(0xFF3F51B5),
+                                onClick = onAssignedClick
+                            )
+                            StatCard(
+                                modifier = Modifier.weight(1f),
+                                label = "IN PROGRESS",
+                                value = (stats?.inProgress ?: 0).toString().padStart(2, '0'),
+                                valueColor = StatusWarning,
+                                onClick = onInProgressClick
+                            )
+                            StatCard(
+                                modifier = Modifier.weight(1f),
+                                label = "COMPLETED",
+                                value = ((stats?.completed ?: 0) + (stats?.resolved ?: 0)).toString().padStart(2, '0'),
+                                valueColor = StatusSuccess,
+                                onClick = onCompletedClick
+                            )
+                        }
                     }
                 }
 
@@ -303,19 +333,27 @@ fun AdminDashboardScreen(
                 }
 
                 // Tasks List
-                items(allComplaints.take(3)) { task ->
-                    OriginalTaskItem(
-                        task = OriginalCivicTask(
-                            id = task.id,
-                            title = task.title,
-                            time = task.dateTime,
-                            priority = task.priority.label.uppercase(),
-                            status = task.status.label,
-                            severity = task.severityLevel,
-                            urgency = task.urgencyLevel
-                        ),
-                        onClick = { onTaskClick(task.id) }
-                    )
+                if (isLoading) {
+                    item {
+                        Box(modifier = Modifier.fillMaxWidth().height(80.dp), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator(color = PrimaryBlue)
+                        }
+                    }
+                } else {
+                    items(recentComplaints) { complaint ->
+                        OriginalTaskItem(
+                            task = OriginalCivicTask(
+                                id = complaint.complaintNumber.ifEmpty { complaint.id },
+                                title = complaint.title,
+                                time = complaint.createdAt ?: "",
+                                priority = complaint.priority.uppercase(),
+                                status = complaint.statusLabel,
+                                severity = complaint.severityLevel,
+                                urgency = complaint.severityLevel
+                            ),
+                            onClick = { onTaskClick(complaint.id) }
+                        )
+                    }
                 }
                 
                 item { Spacer(modifier = Modifier.height(16.dp)) }
@@ -360,7 +398,7 @@ fun AdminDrawerContent(
                 }
                 Spacer(modifier = Modifier.height(16.dp))
                 Text(
-                    text = "CivicEye",
+                    text = "CivicIssue",
                     fontSize = 24.sp,
                     fontWeight = FontWeight.Bold,
                     color = Color.White
@@ -394,9 +432,15 @@ fun AdminDrawerContent(
             isSelected = false,
             onClick = { onItemSelected("History") }
         )
-        
+        DrawerItem(
+            label = "Analytics",
+            icon = Icons.Default.BarChart,
+            isSelected = false,
+            onClick = { onItemSelected("Analytics") }
+        )
+
         HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp, horizontal = 16.dp), color = Color.LightGray.copy(alpha = 0.5f))
-        
+
         DrawerItem(
             label = "Settings",
             icon = Icons.Default.Settings,
@@ -585,9 +629,10 @@ fun OriginalPriorityTag(priority: String) {
 @Composable
 fun OriginalStatusIndicator(status: String) {
     val color = when (status) {
-        "In Progress" -> Color(0xFF3F51B5)
-        "Resolved" -> Color(0xFF4CAF50)
-        "Pending" -> Color(0xFFFF9800)
+        "In Progress" -> StatusInfo
+        "Assigned" -> StatusInfo
+        "Resolved", "Completed" -> StatusSuccess
+        "Pending", "Unassigned" -> StatusWarning
         else -> Color.Gray
     }
     Row(verticalAlignment = Alignment.CenterVertically) {

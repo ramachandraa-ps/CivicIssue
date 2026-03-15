@@ -22,8 +22,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.simats.civicissue.ui.theme.CivicIssueTheme
-import com.simats.civicissue.ui.theme.PrimaryBlue
+import com.simats.civicissue.ui.theme.*
+import java.text.SimpleDateFormat
+import java.util.Locale
+import java.util.TimeZone
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -37,26 +39,109 @@ fun CitizenDashboardScreen(
     onLogoutClick: () -> Unit = {},
     onAIChatClick: () -> Unit = {}
 ) {
-    var reports by remember { mutableStateOf<List<CitizenReport>>(recentReports.take(3)) }
-    var activeIssuesCount by remember { mutableStateOf("03") }
-    var resolvedIssuesCount by remember { mutableStateOf("12") }
+    var recentComplaints by remember { mutableStateOf<List<Complaint>>(emptyList()) }
+    var activeIssuesCount by remember { mutableStateOf("--") }
+    var resolvedIssuesCount by remember { mutableStateOf("--") }
+    var unreadNotifications by remember { mutableStateOf(0) }
+    var isLoading by remember { mutableStateOf(true) }
+    var userName by remember { mutableStateOf(TokenManager.getUser()?.full_name ?: "Citizen") }
 
-    // Simplified data loading logic - using mock data for now to fix build errors
     LaunchedEffect(Unit) {
-        val active = allComplaints.count { 
-            it.status == ComplaintStatus.UNASSIGNED || 
-            it.status == ComplaintStatus.ASSIGNED || 
-            it.status == ComplaintStatus.IN_PROGRESS
+        val api = RetrofitClient.instance
+        try {
+            // Fetch recent complaints
+            val response = api.getComplaints(mapOf("page" to "1", "limit" to "5"))
+            recentComplaints = response.items
+
+            // Count active vs resolved from all complaints stats
+            val allResponse = api.getComplaints(mapOf("page" to "1", "limit" to "1"))
+            val total = allResponse.total
+            val resolvedResponse = api.getComplaints(mapOf("status" to "RESOLVED", "page" to "1", "limit" to "1"))
+            val completedResponse = api.getComplaints(mapOf("status" to "COMPLETED", "page" to "1", "limit" to "1"))
+            val resolvedCount = resolvedResponse.total + completedResponse.total
+            val activeCount = total - resolvedCount
+            activeIssuesCount = activeCount.toString().padStart(2, '0')
+            resolvedIssuesCount = resolvedCount.toString().padStart(2, '0')
+        } catch (e: Exception) {
+            activeIssuesCount = "00"
+            resolvedIssuesCount = "00"
         }
-        val resolved = allComplaints.count { 
-            it.status == ComplaintStatus.RESOLVED || 
-            it.status == ComplaintStatus.COMPLETED
-        }
-        activeIssuesCount = active.toString().padStart(2, '0')
-        resolvedIssuesCount = resolved.toString().padStart(2, '0')
+        try {
+            val unread = api.getUnreadCount()
+            unreadNotifications = unread.count
+        } catch (_: Exception) {}
+        try {
+            val profile = api.getProfile()
+            userName = profile.full_name
+            TokenManager.saveUser(profile)
+        } catch (_: Exception) {}
+        isLoading = false
     }
 
     Scaffold(
+        topBar = {
+            TopAppBar(
+                title = {
+                    Column {
+                        Text(
+                            text = "Welcome,",
+                            fontSize = 16.sp,
+                            color = Color.DarkGray,
+                            fontWeight = FontWeight.Normal
+                        )
+                        Text(
+                            text = userName,
+                            fontSize = 22.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = Color.Black
+                        )
+                    }
+                },
+                actions = {
+                    IconButton(
+                        onClick = onNotificationsClick,
+                        modifier = Modifier
+                            .size(44.dp)
+                            .clip(CircleShape)
+                            .background(Color.White)
+                    ) {
+                        BadgedBox(
+                            badge = {
+                                if (unreadNotifications > 0) {
+                                    Badge { Text("$unreadNotifications") }
+                                }
+                            }
+                        ) {
+                            Icon(
+                                Icons.Default.NotificationsNone,
+                                contentDescription = "Notifications",
+                                tint = Color.Black,
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
+                    }
+                    IconButton(
+                        onClick = onLogoutClick,
+                        modifier = Modifier
+                            .size(44.dp)
+                            .clip(CircleShape)
+                            .background(Color.White)
+                    ) {
+                        Icon(
+                            Icons.Default.Logout,
+                            contentDescription = "Logout",
+                            tint = Color.Red,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = BackgroundLight,
+                    titleContentColor = Color.Black,
+                    actionIconContentColor = Color.Black
+                )
+            )
+        },
         floatingActionButton = {
             FloatingActionButton(
                 onClick = onAIChatClick,
@@ -80,8 +165,8 @@ fun CitizenDashboardScreen(
                 NavigationBarItem(
                     selected = true,
                     onClick = { /* Already on Home */ },
-                    icon = { Icon(Icons.Default.Home, contentDescription = "Home") },
-                    label = { Text("Home", fontSize = 12.sp) },
+                    icon = { Icon(Icons.Filled.Home, contentDescription = "Home") },
+                    label = { Text("Home", fontSize = 11.sp) },
                     colors = NavigationBarItemDefaults.colors(
                         selectedIconColor = PrimaryBlue,
                         selectedTextColor = PrimaryBlue,
@@ -92,10 +177,24 @@ fun CitizenDashboardScreen(
                 )
                 NavigationBarItem(
                     selected = false,
-                    onClick = onViewMyIssues,
-                    icon = { Icon(Icons.Default.Assignment, contentDescription = "My Complaints") },
-                    label = { Text("Reports", fontSize = 12.sp) },
+                    onClick = onReportIssue,
+                    icon = { Icon(Icons.Filled.AddCircle, contentDescription = "Report") },
+                    label = { Text("Report", fontSize = 11.sp) },
                     colors = NavigationBarItemDefaults.colors(
+                        selectedIconColor = PrimaryBlue,
+                        selectedTextColor = PrimaryBlue,
+                        unselectedIconColor = Color.Gray,
+                        unselectedTextColor = Color.Gray
+                    )
+                )
+                NavigationBarItem(
+                    selected = false,
+                    onClick = onViewMyIssues,
+                    icon = { Icon(Icons.Filled.Assignment, contentDescription = "Issues") },
+                    label = { Text("Issues", fontSize = 11.sp) },
+                    colors = NavigationBarItemDefaults.colors(
+                        selectedIconColor = PrimaryBlue,
+                        selectedTextColor = PrimaryBlue,
                         unselectedIconColor = Color.Gray,
                         unselectedTextColor = Color.Gray
                     )
@@ -103,16 +202,18 @@ fun CitizenDashboardScreen(
                 NavigationBarItem(
                     selected = false,
                     onClick = onProfileClick,
-                    icon = { Icon(Icons.Default.Person, contentDescription = "Profile") },
-                    label = { Text("Profile", fontSize = 12.sp) },
+                    icon = { Icon(Icons.Filled.Person, contentDescription = "Profile") },
+                    label = { Text("Profile", fontSize = 11.sp) },
                     colors = NavigationBarItemDefaults.colors(
+                        selectedIconColor = PrimaryBlue,
+                        selectedTextColor = PrimaryBlue,
                         unselectedIconColor = Color.Gray,
                         unselectedTextColor = Color.Gray
                     )
                 )
             }
         },
-        containerColor = Color(0xFFF8FAFC)
+        containerColor = BackgroundLight
     ) { paddingValues ->
         LazyColumn(
             modifier = Modifier
@@ -122,62 +223,6 @@ fun CitizenDashboardScreen(
             verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
             item { Spacer(modifier = Modifier.height(12.dp)) }
-
-            // Top Bar: Welcome, Notifications, Logout
-            item {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column {
-                        Text(
-                            text = "Welcome,",
-                            fontSize = 16.sp,
-                            color = Color.DarkGray
-                        )
-                        Text(
-                            text = "Citizen Vastr",
-                            fontSize = 22.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = Color.Black
-                        )
-                    }
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        IconButton(
-                            onClick = onNotificationsClick,
-                            modifier = Modifier
-                                .size(44.dp)
-                                .clip(CircleShape)
-                                .background(Color.White)
-                        ) {
-                            Icon(
-                                Icons.Default.NotificationsNone,
-                                contentDescription = "Notifications",
-                                tint = Color.Black,
-                                modifier = Modifier.size(24.dp)
-                            )
-                        }
-                        IconButton(
-                            onClick = onLogoutClick,
-                            modifier = Modifier
-                                .size(44.dp)
-                                .clip(CircleShape)
-                                .background(Color.White)
-                        ) {
-                            Icon(
-                                Icons.Default.Logout,
-                                contentDescription = "Logout",
-                                tint = Color.Red,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-                    }
-                }
-            }
 
             // Main Action Card: Report New Issue
             item {
@@ -231,14 +276,14 @@ fun CitizenDashboardScreen(
                         label = "Active Issues",
                         value = activeIssuesCount,
                         icon = Icons.Default.ErrorOutline,
-                        color = Color(0xFFF59E0B)
+                        color = StatusWarning
                     )
                     CitizenStatCard(
                         modifier = Modifier.weight(1f).clickable { onResolvedIssuesClick() },
                         label = "Resolved",
                         value = resolvedIssuesCount,
                         icon = Icons.Default.Verified,
-                        color = Color(0xFF10B981)
+                        color = StatusSuccess
                     )
                 }
             }
@@ -266,8 +311,30 @@ fun CitizenDashboardScreen(
                 }
             }
 
-            items(reports.take(3)) { report ->
-                CitizenReportItem(report)
+            if (isLoading) {
+                item {
+                    Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(color = PrimaryBlue)
+                    }
+                }
+            } else if (recentComplaints.isEmpty()) {
+                item {
+                    Text(
+                        "No complaints yet. Report your first issue!",
+                        color = Color.DarkGray,
+                        modifier = Modifier.padding(16.dp)
+                    )
+                }
+            } else {
+                items(recentComplaints.take(3)) { complaint ->
+                    val report = CitizenReport(
+                        title = complaint.title.ifEmpty { complaint.category ?: "Issue" },
+                        date = complaint.createdAt?.let { formatDate(it) } ?: "",
+                        status = complaint.statusLabel,
+                        icon = categoryIcon(complaint.category)
+                    )
+                    CitizenReportItem(report)
+                }
             }
 
             item { Spacer(modifier = Modifier.height(10.dp)) }
@@ -364,10 +431,11 @@ fun CitizenReportItem(report: CitizenReport) {
 @Composable
 fun StatusBadge(status: String) {
     val color = when (status) {
-        "Resolved" -> Color(0xFF4CAF50)
-        "In Progress" -> Color(0xFF2196F3)
-        "Pending" -> Color(0xFFFFA000)
-        else -> Color.DarkGray
+        "Resolved", "Completed" -> StatusSuccess
+        "In Progress" -> StatusInfo
+        "Pending", "Unassigned" -> StatusWarning
+        "Assigned" -> StatusInfo
+        else -> TextSecondary
     }
     Surface(
         color = color.copy(alpha = 0.1f),
@@ -390,11 +458,24 @@ data class CitizenReport(
     val icon: ImageVector
 )
 
-val recentReports = listOf(
-    CitizenReport("Pothole reported at Main St.", "Today, 10:30 AM", "Pending", Icons.Default.ReportProblem),
-    CitizenReport("Street light repair needed", "Yesterday", "In Progress", Icons.Default.Lightbulb),
-    CitizenReport("Garbage clearance requested", "2 days ago", "Resolved", Icons.Default.DeleteOutline)
-)
+fun categoryIcon(category: String?): ImageVector = when (category?.lowercase()) {
+    "pothole" -> Icons.Default.ReportProblem
+    "street light", "streetlight" -> Icons.Default.Lightbulb
+    "waste collection", "garbage" -> Icons.Default.DeleteOutline
+    "water leakage", "water" -> Icons.Default.WaterDrop
+    "drainage" -> Icons.Default.WaterDrop
+    else -> Icons.Default.ReportProblem
+}
+
+fun formatDate(iso: String): String {
+    return try {
+        val parser = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.getDefault())
+        parser.timeZone = TimeZone.getTimeZone("UTC")
+        val date = parser.parse(iso)
+        val formatter = SimpleDateFormat("MMM dd, hh:mm a", Locale.getDefault())
+        formatter.format(date!!)
+    } catch (_: Exception) { iso }
+}
 
 @Preview(showBackground = true)
 @Composable

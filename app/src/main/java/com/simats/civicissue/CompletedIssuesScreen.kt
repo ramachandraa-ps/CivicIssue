@@ -9,7 +9,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -20,6 +20,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.simats.civicissue.ui.theme.CivicIssueTheme
 import com.simats.civicissue.ui.theme.PrimaryBlue
+import kotlinx.coroutines.async
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -55,16 +56,46 @@ fun CompletedIssuesScreen(
         },
         containerColor = Color(0xFFF5F7FA)
     ) { paddingValues ->
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-                .padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-            contentPadding = PaddingValues(vertical = 16.dp)
-        ) {
-            items(completedIssues) { issue ->
-                CompletedIssueItem(issue)
+        var complaints by remember { mutableStateOf<List<Complaint>>(emptyList()) }
+        var isLoading by remember { mutableStateOf(true) }
+
+        LaunchedEffect(Unit) {
+            try {
+                val api = RetrofitClient.instance
+                val completedDeferred = async { api.getComplaints(mapOf("status" to "COMPLETED")).items }
+                val resolvedDeferred = async { api.getComplaints(mapOf("status" to "RESOLVED")).items }
+                complaints = completedDeferred.await() + resolvedDeferred.await()
+            } catch (_: Exception) { }
+            finally { isLoading = false }
+        }
+
+        if (isLoading) {
+            Box(modifier = Modifier.fillMaxSize().padding(paddingValues), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(color = PrimaryBlue)
+            }
+        } else if (complaints.isEmpty()) {
+            Box(modifier = Modifier.fillMaxSize().padding(paddingValues), contentAlignment = Alignment.Center) {
+                Text("No completed issues", color = Color.Gray)
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues)
+                    .padding(horizontal = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                contentPadding = PaddingValues(vertical = 16.dp)
+            ) {
+                items(complaints) { complaint ->
+                    CompletedIssueItem(
+                        CompletedIssueData(
+                            id = complaint.complaintNumber.ifEmpty { complaint.id },
+                            title = complaint.title,
+                            priority = complaint.priority,
+                            time = complaint.updatedAt ?: complaint.createdAt ?: ""
+                        )
+                    )
+                }
             }
         }
     }

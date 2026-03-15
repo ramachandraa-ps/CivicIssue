@@ -1,6 +1,7 @@
 package com.simats.civicissue
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -11,7 +12,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -23,12 +24,24 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.simats.civicissue.ui.theme.CivicIssueTheme
 import com.simats.civicissue.ui.theme.PrimaryBlue
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun NotificationScreen(
     onBack: () -> Unit = {}
 ) {
+    var notifications by remember { mutableStateOf<List<CivicNotification>>(emptyList()) }
+    var isLoading by remember { mutableStateOf(true) }
+    val scope = rememberCoroutineScope()
+
+    LaunchedEffect(Unit) {
+        try {
+            notifications = RetrofitClient.instance.getNotifications()
+        } catch (_: Exception) { }
+        finally { isLoading = false }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -49,6 +62,18 @@ fun NotificationScreen(
                         )
                     }
                 },
+                actions = {
+                    TextButton(onClick = {
+                        scope.launch {
+                            try {
+                                RetrofitClient.instance.markAllNotificationsRead()
+                                notifications = notifications.map { it.copy(isRead = true) }
+                            } catch (_: Exception) { }
+                        }
+                    }) {
+                        Text("Mark all read", color = PrimaryBlue, fontSize = 12.sp)
+                    }
+                },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = Color.White,
                     titleContentColor = Color.Black,
@@ -56,29 +81,74 @@ fun NotificationScreen(
                 )
             )
         },
-        containerColor = Color(0xFFF5F7FA) // Light gray background from image
+        containerColor = Color(0xFFF5F7FA)
     ) { paddingValues ->
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-                .padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-            contentPadding = PaddingValues(vertical = 16.dp)
-        ) {
-            items(adminNotifications) { notification ->
-                AdminNotificationItem(notification)
+        if (isLoading) {
+            Box(modifier = Modifier.fillMaxSize().padding(paddingValues), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(color = PrimaryBlue)
+            }
+        } else if (notifications.isEmpty()) {
+            Box(modifier = Modifier.fillMaxSize().padding(paddingValues), contentAlignment = Alignment.Center) {
+                Text("No notifications", color = Color.Gray)
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues)
+                    .padding(horizontal = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                contentPadding = PaddingValues(vertical = 16.dp)
+            ) {
+                items(notifications) { notification ->
+                    val iconColor = when (notification.priority) {
+                        "HIGH" -> Color(0xFFD32F2F)
+                        "MEDIUM" -> Color(0xFFFFA000)
+                        else -> PrimaryBlue
+                    }
+                    val icon = when (notification.type) {
+                        "complaint_created" -> Icons.Default.AddCircle
+                        "status_update" -> Icons.Default.CheckCircle
+                        "officer_assigned" -> Icons.Default.Engineering
+                        "high_priority" -> Icons.Default.Warning
+                        else -> Icons.Default.Notifications
+                    }
+                    AdminNotificationItem(
+                        notification = AdminNotificationInfo(
+                            title = notification.title,
+                            description = notification.message,
+                            time = notification.createdAt ?: "",
+                            icon = icon,
+                            iconBgColor = iconColor
+                        ),
+                        isRead = notification.isRead,
+                        onClick = {
+                            scope.launch {
+                                try {
+                                    RetrofitClient.instance.markNotificationRead(notification.id)
+                                    notifications = notifications.map {
+                                        if (it.id == notification.id) it.copy(isRead = true) else it
+                                    }
+                                } catch (_: Exception) { }
+                            }
+                        }
+                    )
+                }
             }
         }
     }
 }
 
 @Composable
-fun AdminNotificationItem(notification: AdminNotificationInfo) {
+fun AdminNotificationItem(
+    notification: AdminNotificationInfo,
+    isRead: Boolean = false,
+    onClick: () -> Unit = {}
+) {
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().clickable { onClick() },
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
+        colors = CardDefaults.cardColors(containerColor = if (isRead) Color.White else Color(0xFFE3F2FD)),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Row(

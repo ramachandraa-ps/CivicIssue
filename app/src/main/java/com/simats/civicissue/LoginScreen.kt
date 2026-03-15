@@ -29,6 +29,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.simats.civicissue.ui.theme.*
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -37,11 +38,14 @@ fun LoginScreen(
     onBack: () -> Unit,
     onSignUp: () -> Unit,
     onForgotPassword: () -> Unit,
-    onLoginSuccess: () -> Unit
+    onLoginSuccess: (String) -> Unit
 ) {
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var passwordVisible by remember { mutableStateOf(false) }
+    var isLoading by remember { mutableStateOf(false) }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
 
     Scaffold(
         topBar = {
@@ -108,7 +112,7 @@ fun LoginScreen(
             )
 
             Text(
-                text = "Welcome back to CivicEye",
+                text = "Welcome back to CivicIssue",
                 fontSize = 16.sp,
                 color = Color.Gray,
                 textAlign = TextAlign.Center
@@ -196,20 +200,61 @@ fun LoginScreen(
 
                     Spacer(modifier = Modifier.height(24.dp))
 
+                    if (errorMessage != null) {
+                        Text(
+                            text = errorMessage!!,
+                            color = Color.Red,
+                            fontSize = 14.sp,
+                            modifier = Modifier.padding(bottom = 8.dp)
+                        )
+                    }
+
                     Button(
-                        onClick = onLoginSuccess,
+                        onClick = {
+                            scope.launch {
+                                isLoading = true
+                                errorMessage = null
+                                try {
+                                    val response = RetrofitClient.instance.login(
+                                        LoginRequest(email.trim(), password)
+                                    )
+                                    TokenManager.saveToken(response.access_token)
+                                    TokenManager.saveUser(response.user)
+                                    onLoginSuccess(response.user.role)
+                                } catch (e: retrofit2.HttpException) {
+                                    errorMessage = when (e.code()) {
+                                        401 -> "Invalid email or password"
+                                        403 -> "Account not verified. Please verify your email first."
+                                        else -> "Login failed: ${e.message()}"
+                                    }
+                                } catch (e: Exception) {
+                                    errorMessage = e.message ?: "Something went wrong"
+                                } finally {
+                                    isLoading = false
+                                }
+                            }
+                        },
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(56.dp),
                         shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue)
+                        colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue),
+                        enabled = !isLoading && email.isNotBlank() && password.isNotBlank()
                     ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text("Login", fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null)
+                        if (isLoading) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(24.dp),
+                                color = Color.White,
+                                strokeWidth = 2.dp
+                            )
+                        } else {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text("Login", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null)
+                            }
                         }
                     }
                 }
@@ -239,6 +284,6 @@ fun LoginScreen(
 @Composable
 fun LoginScreenPreview() {
     CivicIssueTheme {
-        LoginScreen(role = "Citizen", onBack = {}, onSignUp = {}, onForgotPassword = {}, onLoginSuccess = {})
+        LoginScreen(role = "Citizen", onBack = {}, onSignUp = {}, onForgotPassword = {}, onLoginSuccess = { _ -> })
     }
 }

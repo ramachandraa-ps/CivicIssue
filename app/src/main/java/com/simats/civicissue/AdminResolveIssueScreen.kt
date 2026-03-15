@@ -1,5 +1,7 @@
 package com.simats.civicissue
 
+import android.Manifest
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.ImageDecoder
 import android.net.Uri
@@ -34,7 +36,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
+import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.Priority
 import com.simats.civicissue.ui.theme.PrimaryBlue
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -44,10 +50,16 @@ fun AdminResolveIssueScreen(
     onResolveSuccess: () -> Unit = {}
 ) {
     var completionNote by remember { mutableStateOf("") }
-    var location by remember { mutableStateOf("Jubilee Hills, Road No. 36, Hyderabad") }
+    var location by remember { mutableStateOf("") }
     var capturedBitmap by remember { mutableStateOf<Bitmap?>(null) }
     var isSubmitting by remember { mutableStateOf(false) }
+    var latitude by remember { mutableDoubleStateOf(0.0) }
+    var longitude by remember { mutableDoubleStateOf(0.0) }
+    var showMapPicker by remember { mutableStateOf(false) }
+    var isGettingLocation by remember { mutableStateOf(false) }
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val fusedLocationClient = remember { LocationServices.getFusedLocationProviderClient(context) }
 
     val cameraLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicturePreview()) { bitmap ->
         if (bitmap != null) {
@@ -188,15 +200,17 @@ fun AdminResolveIssueScreen(
                     }
                 }
 
-                // Location Info
+                // Location Section
                 Column {
                     Text("Completed Location", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = Color.Black)
                     Spacer(Modifier.height(8.dp))
+
+                    // Location text display
                     OutlinedTextField(
                         value = location,
                         onValueChange = { location = it },
                         modifier = Modifier.fillMaxWidth(),
-                        leadingIcon = { Icon(imageVector = Icons.Default.LocationOn, contentDescription = null, tint = Color.Red) },
+                        leadingIcon = { Icon(Icons.Default.LocationOn, null, tint = Color.Red) },
                         shape = RoundedCornerShape(12.dp),
                         readOnly = true,
                         colors = OutlinedTextFieldDefaults.colors(
@@ -206,6 +220,73 @@ fun AdminResolveIssueScreen(
                             focusedTextColor = Color.Black
                         )
                     )
+
+                    Spacer(Modifier.height(8.dp))
+
+                    // GPS + Map buttons row
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(
+                            onClick = {
+                                // Get GPS location
+                                isGettingLocation = true
+                                val hasPerm = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+                                if (hasPerm) {
+                                    fusedLocationClient.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, null)
+                                        .addOnSuccessListener { loc ->
+                                            if (loc != null) {
+                                                latitude = loc.latitude
+                                                longitude = loc.longitude
+                                                scope.launch {
+                                                    try {
+                                                        val geo = RetrofitClient.instance.reverseGeocode(loc.latitude, loc.longitude)
+                                                        location = geo.displayName
+                                                    } catch (e: Exception) {
+                                                        location = "Lat: ${loc.latitude}, Lng: ${loc.longitude}"
+                                                    }
+                                                    isGettingLocation = false
+                                                }
+                                            } else {
+                                                isGettingLocation = false
+                                            }
+                                        }.addOnFailureListener { isGettingLocation = false }
+                                } else {
+                                    isGettingLocation = false
+                                    // Would need permission launcher here too
+                                }
+                            },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            if (isGettingLocation) {
+                                CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                            } else {
+                                Icon(Icons.Default.MyLocation, null)
+                            }
+                            Spacer(Modifier.width(4.dp))
+                            Text("My Location")
+                        }
+
+                        OutlinedButton(
+                            onClick = { showMapPicker = true },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Icon(Icons.Default.Map, null)
+                            Spacer(Modifier.width(4.dp))
+                            Text("Pick on Map")
+                        }
+                    }
+
+                    // Map preview
+                    if (latitude != 0.0 && longitude != 0.0) {
+                        Spacer(Modifier.height(8.dp))
+                        MapViewCard(
+                            latitude = latitude,
+                            longitude = longitude,
+                            height = 150,
+                            onClick = { showMapPicker = true }
+                        )
+                    }
                 }
 
                 // Completion Note
@@ -235,31 +316,45 @@ fun AdminResolveIssueScreen(
                 Button(
                     onClick = {
                         isSubmitting = true
-                        
-                        // Simulate sending notification to Citizen
-                        CitizenNotificationStore.citizenNotifications.add(0, CitizenNotificationInfo(
-                            title = "Task Completed!",
-                            message = "The issue $complaintId has been resolved. Remarks: $completionNote",
-                            time = "Just now",
-                            icon = Icons.Default.TaskAlt,
-                            color = Color(0xFF4CAF50),
-                            image = capturedBitmap
-                        ))
-
-                        Toast.makeText(context, "Resolution submitted and citizen notified!", Toast.LENGTH_LONG).show()
-                        
-                        onResolveSuccess()
+                        scope.launch {
+                            try {
+                                RetrofitClient.instance.resolveComplaint(
+                                    complaintId,
+                                    ResolveRequest(resolution_notes = completionNote)
+                                )
+                                Toast.makeText(context, "Resolution submitted successfully!", Toast.LENGTH_LONG).show()
+                                onResolveSuccess()
+                            } catch (e: Exception) {
+                                Toast.makeText(context, "Failed: ${e.message}", Toast.LENGTH_LONG).show()
+                                isSubmitting = false
+                            }
+                        }
                     },
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(56.dp),
                     shape = RoundedCornerShape(12.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50)),
-                    enabled = capturedBitmap != null && completionNote.isNotBlank()
+                    enabled = completionNote.isNotBlank() && !isSubmitting
                 ) {
                     Text("Submit", fontWeight = FontWeight.Bold, fontSize = 16.sp)
                 }
             }
         }
+    }
+
+    // Map Picker Dialog
+    if (showMapPicker) {
+        MapLocationPicker(
+            initialLat = if (latitude != 0.0) latitude else 17.385,
+            initialLng = if (longitude != 0.0) longitude else 78.4867,
+            onLocationSelected = { lat, lng, address ->
+                latitude = lat
+                longitude = lng
+                location = address
+                showMapPicker = false
+            },
+            onDismiss = { showMapPicker = false }
+        )
     }
 }

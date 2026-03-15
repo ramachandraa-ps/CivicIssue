@@ -21,15 +21,32 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.simats.civicissue.ui.theme.PrimaryBlue
+import android.util.Log
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CitizenIssuesScreen(
     onBack: () -> Unit = {},
     onHomeClick: () -> Unit = {},
+    onReportClick: () -> Unit = {},
     onProfileClick: () -> Unit = {}
 ) {
     var selectedTab by remember { mutableIntStateOf(1) } // 0: Home, 1: Issues, 2: Profile
+    var complaints by remember { mutableStateOf<List<Complaint>>(emptyList()) }
+    var isLoading by remember { mutableStateOf(true) }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(Unit) {
+        try {
+            val response = RetrofitClient.instance.getComplaints()
+            complaints = response.items
+        } catch (e: Exception) {
+            errorMessage = e.message ?: "Failed to load complaints"
+            Log.e("CitizenIssues", "Load failed", e)
+        } finally {
+            isLoading = false
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -52,16 +69,27 @@ fun CitizenIssuesScreen(
             )
         },
         bottomBar = {
-            NavigationBar(
-                containerColor = Color.White,
-                tonalElevation = 8.dp
-            ) {
+            NavigationBar(containerColor = Color.White, tonalElevation = 8.dp) {
                 NavigationBarItem(
                     selected = false,
                     onClick = onHomeClick,
-                    icon = { Icon(Icons.Default.Home, contentDescription = "Home") },
-                    label = { Text("Home", fontSize = 12.sp) },
+                    icon = { Icon(Icons.Filled.Home, contentDescription = "Home") },
+                    label = { Text("Home", fontSize = 11.sp) },
                     colors = NavigationBarItemDefaults.colors(
+                        selectedIconColor = PrimaryBlue,
+                        selectedTextColor = PrimaryBlue,
+                        unselectedIconColor = Color.Gray,
+                        unselectedTextColor = Color.Gray
+                    )
+                )
+                NavigationBarItem(
+                    selected = false,
+                    onClick = onReportClick,
+                    icon = { Icon(Icons.Filled.AddCircle, contentDescription = "Report") },
+                    label = { Text("Report", fontSize = 11.sp) },
+                    colors = NavigationBarItemDefaults.colors(
+                        selectedIconColor = PrimaryBlue,
+                        selectedTextColor = PrimaryBlue,
                         unselectedIconColor = Color.Gray,
                         unselectedTextColor = Color.Gray
                     )
@@ -69,8 +97,8 @@ fun CitizenIssuesScreen(
                 NavigationBarItem(
                     selected = true,
                     onClick = { /* Already on Issues */ },
-                    icon = { Icon(Icons.Default.ListAlt, contentDescription = "Issues") },
-                    label = { Text("Issues", fontSize = 12.sp) },
+                    icon = { Icon(Icons.Filled.Assignment, contentDescription = "Issues") },
+                    label = { Text("Issues", fontSize = 11.sp) },
                     colors = NavigationBarItemDefaults.colors(
                         selectedIconColor = PrimaryBlue,
                         selectedTextColor = PrimaryBlue,
@@ -82,9 +110,11 @@ fun CitizenIssuesScreen(
                 NavigationBarItem(
                     selected = false,
                     onClick = onProfileClick,
-                    icon = { Icon(Icons.Default.Person, contentDescription = "Profile") },
-                    label = { Text("Profile", fontSize = 12.sp) },
+                    icon = { Icon(Icons.Filled.Person, contentDescription = "Profile") },
+                    label = { Text("Profile", fontSize = 11.sp) },
                     colors = NavigationBarItemDefaults.colors(
+                        selectedIconColor = PrimaryBlue,
+                        selectedTextColor = PrimaryBlue,
                         unselectedIconColor = Color.Gray,
                         unselectedTextColor = Color.Gray
                     )
@@ -101,7 +131,7 @@ fun CitizenIssuesScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             item { Spacer(modifier = Modifier.height(8.dp)) }
-            
+
             item {
                 Text(
                     "Complaint History",
@@ -112,8 +142,27 @@ fun CitizenIssuesScreen(
                 )
             }
 
-            items(citizenComplaints) { complaint ->
-                ComplaintHistoryCard(complaint)
+            if (isLoading) {
+                item {
+                    Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(color = PrimaryBlue)
+                    }
+                }
+            } else if (errorMessage != null) {
+                item {
+                    Text(errorMessage!!, color = Color.Red, modifier = Modifier.padding(16.dp))
+                }
+            } else if (complaints.isEmpty()) {
+                item {
+                    Box(modifier = Modifier.fillParentMaxSize(), contentAlignment = Alignment.Center) {
+                        Text("No complaints found.", color = Color.DarkGray)
+                    }
+                }
+            } else {
+                items(complaints) { complaint ->
+                    val detailed = complaint.toCitizenComplaintDetailed()
+                    ComplaintHistoryCard(detailed)
+                }
             }
 
             item { Spacer(modifier = Modifier.height(16.dp)) }
@@ -274,27 +323,19 @@ data class TimelineEvent(
     val date: String
 )
 
-val citizenComplaints = listOf(
-    CitizenComplaintDetailed(
-        "4281", "Pothole Repair", "Pending", "Citizen Vastr", "Today, 10:30 AM", Icons.Default.ReportProblem,
-        listOf(
-            TimelineEvent("Complaint Submitted", "March 3, 2026, 10:30 AM")
-        )
-    ),
-    CitizenComplaintDetailed(
-        "3952", "Street Light", "In Progress", "Citizen Vastr", "Yesterday, 6:45 PM", Icons.Default.Lightbulb,
-        listOf(
-            TimelineEvent("Complaint Submitted", "March 2, 2026, 06:45 PM"),
-            TimelineEvent("Task Assigned to Officer", "March 2, 2026, 08:30 PM"),
-            TimelineEvent("Work In Progress", "March 3, 2026, 09:00 AM")
-        )
-    ),
-    CitizenComplaintDetailed(
-        "3104", "Garbage Clearance", "Resolved", "Citizen Vastr", "Feb 28, 09:15 AM", Icons.Default.DeleteOutline,
-        listOf(
-            TimelineEvent("Complaint Submitted", "Feb 28, 2026, 09:15 AM"),
-            TimelineEvent("Under Investigation", "Feb 28, 2026, 11:00 AM"),
-            TimelineEvent("Resolved Successfully", "March 1, 2026, 04:30 PM")
+// Keep as fallback for previews; screens now load from API
+val citizenComplaints = emptyList<CitizenComplaintDetailed>()
+
+fun Complaint.toCitizenComplaintDetailed(): CitizenComplaintDetailed {
+    return CitizenComplaintDetailed(
+        id = complaintNumber.ifEmpty { id },
+        category = category ?: title,
+        status = statusLabel,
+        userName = citizenName.ifEmpty { "You" },
+        uploadTime = createdAt?.let { formatDate(it) } ?: "",
+        icon = categoryIcon(category),
+        timeline = listOf(
+            TimelineEvent("Complaint Submitted", createdAt?.let { formatDate(it) } ?: "")
         )
     )
-)
+}

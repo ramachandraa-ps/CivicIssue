@@ -11,7 +11,7 @@ import androidx.compose.material.icons.filled.Assignment
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.HourglassEmpty
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -20,8 +20,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.simats.civicissue.ui.theme.CivicIssueTheme
-import com.simats.civicissue.ui.theme.PrimaryBlue
+import com.simats.civicissue.ui.theme.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -55,83 +54,70 @@ fun StatusScreen(
                 )
             )
         },
-        containerColor = Color(0xFFF5F7FA)
+        containerColor = BackgroundLight
     ) { paddingValues ->
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-                .padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-            contentPadding = PaddingValues(top = 16.dp, bottom = 16.dp)
-        ) {
-            item {
-                StatusOverviewCard()
-            }
-            
-            item {
-                Text(
-                    text = "Status Breakdown",
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.Black,
-                    modifier = Modifier.padding(vertical = 8.dp)
-                )
-            }
-            
-            item {
-                StatusDetailCard(
-                    label = "Assigned Issues",
-                    count = "342",
-                    icon = Icons.Default.Assignment,
-                    color = Color(0xFF673AB7)
-                )
-            }
-            
-            item {
-                StatusDetailCard(
-                    label = "In Progress Issues",
-                    count = "156",
-                    icon = Icons.Default.HourglassEmpty,
-                    color = Color(0xFF2196F3)
-                )
-            }
-            
-            item {
-                StatusDetailCard(
-                    label = "Resolved Issues",
-                    count = "786",
-                    icon = Icons.Default.CheckCircle,
-                    color = Color(0xFF4CAF50)
-                )
-            }
-        }
-    }
-}
+        var stats by remember { mutableStateOf<DashboardStats?>(null) }
+        var isLoading by remember { mutableStateOf(true) }
 
-@Composable
-fun StatusOverviewCard() {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text(
-                text = "Overall Status",
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color.Black
-            )
-            Spacer(modifier = Modifier.height(16.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
+        LaunchedEffect(Unit) {
+            try {
+                stats = RetrofitClient.instance.getDashboardStats()
+            } catch (_: Exception) { }
+            finally { isLoading = false }
+        }
+
+        if (isLoading) {
+            Box(modifier = Modifier.fillMaxSize().padding(paddingValues), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(color = PrimaryBlue)
+            }
+        } else {
+            val s = stats
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues)
+                    .padding(horizontal = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+                contentPadding = PaddingValues(top = 16.dp, bottom = 16.dp)
             ) {
-                StatusMetricItem(label = "Total", value = "1,284", color = PrimaryBlue)
-                StatusMetricItem(label = "Pending", value = "498", color = Color(0xFFFFA000))
-                StatusMetricItem(label = "Closed", value = "786", color = Color(0xFF4CAF50))
+                item {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color.White),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Text(text = "Overall Status", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.Black)
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                StatusMetricItem(label = "Total", value = "${s?.totalComplaints ?: 0}", color = PrimaryBlue)
+                                StatusMetricItem(label = "Pending", value = "${(s?.unassigned ?: 0) + (s?.assigned ?: 0) + (s?.inProgress ?: 0)}", color = StatusWarning)
+                                StatusMetricItem(label = "Closed", value = "${(s?.resolved ?: 0) + (s?.completed ?: 0)}", color = StatusSuccess)
+                            }
+                        }
+                    }
+                }
+
+                item {
+                    Text(text = "Status Breakdown", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color.Black, modifier = Modifier.padding(vertical = 8.dp))
+                }
+
+                item {
+                    StatusDetailCard(label = "Assigned Issues", count = "${s?.assigned ?: 0}", icon = Icons.Default.Assignment, color = Color(0xFF673AB7))
+                }
+
+                item {
+                    StatusDetailCard(label = "In Progress Issues", count = "${s?.inProgress ?: 0}", icon = Icons.Default.HourglassEmpty, color = StatusInfo)
+                }
+
+                item {
+                    StatusDetailCard(label = "Resolved Issues", count = "${(s?.resolved ?: 0) + (s?.completed ?: 0)}", icon = Icons.Default.CheckCircle, color = StatusSuccess)
+                }
+
+                item {
+                    StatusDetailCard(label = "Unassigned Issues", count = "${s?.unassigned ?: 0}", icon = Icons.Default.Assignment, color = StatusWarning)
+                }
             }
         }
     }

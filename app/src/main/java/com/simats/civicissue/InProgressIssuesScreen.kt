@@ -10,7 +10,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -56,16 +56,42 @@ fun InProgressIssuesScreen(
         },
         containerColor = Color(0xFFF5F7FA)
     ) { paddingValues ->
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-                .padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-            contentPadding = PaddingValues(vertical = 16.dp)
-        ) {
-            items(inProgressIssues) { issue ->
-                InProgressIssueItem(issue)
+        var complaints by remember { mutableStateOf<List<Complaint>>(emptyList()) }
+        var isLoading by remember { mutableStateOf(true) }
+
+        LaunchedEffect(Unit) {
+            try {
+                complaints = RetrofitClient.instance.getComplaints(mapOf("status" to "IN_PROGRESS")).items
+            } catch (_: Exception) { }
+            finally { isLoading = false }
+        }
+
+        if (isLoading) {
+            Box(modifier = Modifier.fillMaxSize().padding(paddingValues), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(color = PrimaryBlue)
+            }
+        } else if (complaints.isEmpty()) {
+            Box(modifier = Modifier.fillMaxSize().padding(paddingValues), contentAlignment = Alignment.Center) {
+                Text("No in-progress issues", color = Color.Gray)
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues)
+                    .padding(horizontal = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                contentPadding = PaddingValues(vertical = 16.dp)
+            ) {
+                items(complaints) { complaint ->
+                    InProgressIssueItem(
+                        InProgressIssueData(
+                            id = complaint.complaintNumber.ifEmpty { complaint.id },
+                            title = complaint.title,
+                            priority = complaint.priority
+                        )
+                    )
+                }
             }
         }
     }

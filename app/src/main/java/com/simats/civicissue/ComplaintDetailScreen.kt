@@ -14,6 +14,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import kotlinx.coroutines.CoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -24,7 +25,12 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.simats.civicissue.ui.theme.PrimaryBlue
+import androidx.compose.foundation.clickable
+import coil.compose.AsyncImage
+import com.simats.civicissue.ui.theme.*
+import kotlinx.coroutines.async
+import kotlinx.coroutines.launch
+import android.util.Log
 import kotlin.math.*
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -36,30 +42,54 @@ fun ComplaintDetailScreen(
     onUpdateStatus: (ComplaintStatus) -> Unit,
     onResolveClick: (String) -> Unit = {}
 ) {
-    // Mock data for display
-    val complaint = remember(complaintId) {
-        allComplaints.find { it.id == complaintId } ?: allComplaints[0]
+    var complaint by remember { mutableStateOf<Complaint?>(null) }
+    var statusHistory by remember { mutableStateOf<List<StatusHistoryItem>>(emptyList()) }
+    var similarIssues by remember { mutableStateOf<List<Pair<String, String>>>(emptyList()) }
+    var isLoading by remember { mutableStateOf(true) }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
+    var isUpdatingStatus by remember { mutableStateOf(false) }
+    var statusUpdateMessage by remember { mutableStateOf<String?>(null) }
+    var fullScreenImageUrl by remember { mutableStateOf<String?>(null) }
+    var showFullMap by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+
+    LaunchedEffect(complaintId) {
+        try {
+            val api = RetrofitClient.instance
+            val complaintDeferred = async { api.getComplaint(complaintId) }
+            val historyDeferred = async { api.getComplaintHistory(complaintId) }
+            val similarDeferred = async {
+                try { api.getSimilarComplaints(complaintId) } catch (_: Exception) { emptyList() }
+            }
+            complaint = complaintDeferred.await()
+            statusHistory = historyDeferred.await()
+            val similarList = similarDeferred.await()
+            similarIssues = similarList.take(3).map { s ->
+                val dist = calculateDistance(
+                    complaint?.latitude ?: 0.0, complaint?.longitude ?: 0.0,
+                    s.latitude, s.longitude
+                )
+                val distStr = if (dist < 1.0) "${(dist * 1000).toInt()}m" else "%.1fkm".format(dist)
+                Pair(s.complaintNumber.ifEmpty { s.id }, "${s.category ?: "Issue"} nearby - $distStr")
+            }
+        } catch (e: Exception) {
+            errorMessage = e.message ?: "Failed to load complaint"
+        } finally { isLoading = false }
     }
 
-    // Calculate Similar Issues dynamically (within 2km radius)
-    val similarIssues = remember(complaint) {
-        allComplaints
-            .filter { it.id != complaint.id }
-            .map { other ->
-                val dist = calculateDistance(complaint.latitude, complaint.longitude, other.latitude, other.longitude)
-                Pair(other.id, dist)
-            }
-            .filter { pair -> pair.second <= 2.0 }
-            .sortedBy { pair -> pair.second }
-            .take(3)
-            .map { pair ->
-                val id = pair.first
-                val dist = pair.second
-                val distStr = if (dist < 1.0) "${(dist * 1000).toInt()}m" else "%.1fkm".format(dist)
-                val categoryMatch = allComplaints.find { it.id == id }?.category ?: "Issue"
-                Pair(id, "$categoryMatch nearby - $distStr")
-            }
+    if (isLoading) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            CircularProgressIndicator(color = PrimaryBlue)
+        }
+        return
     }
+    if (complaint == null) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Text(errorMessage ?: "Complaint not found", color = Color.Gray)
+        }
+        return
+    }
+    val comp = complaint!!
 
     Scaffold(
         topBar = {
@@ -86,7 +116,7 @@ fun ComplaintDetailScreen(
                 )
             )
         },
-        containerColor = Color(0xFFF8F9FE)
+        containerColor = BackgroundLight
     ) { paddingValues ->
         LazyColumn(
             modifier = Modifier
@@ -106,16 +136,16 @@ fun ComplaintDetailScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = complaint.id,
+                            text = comp.complaintNumber.ifEmpty { comp.id },
                             fontSize = 14.sp,
                             color = Color.Gray,
                             fontWeight = FontWeight.Medium
                         )
-                        StatusBadge(status = complaint.status)
+                        StatusBadge(status = comp.statusLabel)
                     }
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = complaint.title,
+                        text = comp.title,
                         fontSize = 22.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color.Black
@@ -129,9 +159,9 @@ fun ComplaintDetailScreen(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    InfoChip(icon = Icons.Default.Category, text = complaint.category)
-                    InfoChip(icon = Icons.Default.Person, text = complaint.citizenName)
-                    PriorityBadge(priority = complaint.priority)
+                    InfoChip(icon = Icons.Default.Category, text = comp.category ?: "N/A")
+                    InfoChip(icon = Icons.Default.Person, text = comp.citizenName)
+                    PriorityTag(priority = comp.priority)
                 }
             }
 
@@ -146,7 +176,7 @@ fun ComplaintDetailScreen(
                         Text("Description", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = PrimaryBlue)
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = complaint.description,
+                            text = comp.description ?: "No description provided",
                             fontSize = 14.sp,
                             lineHeight = 20.sp,
                             color = Color.DarkGray
@@ -155,7 +185,7 @@ fun ComplaintDetailScreen(
                 }
             }
 
-            // AI AI Insights (Severity & Urgency)
+            // AI Insights (Severity & Priority)
             item {
                 Card(
                     shape = RoundedCornerShape(16.dp),
@@ -172,65 +202,62 @@ fun ComplaintDetailScreen(
                         Row(modifier = Modifier.fillMaxWidth()) {
                             Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.Start) {
                                 Text("SEVERITY", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
-                                Text(complaint.severityLevel, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color(0xFF7B1FA2))
+                                Text(comp.severityLevel, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color(0xFF7B1FA2))
                             }
                             Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.Start) {
-                                Text("URGENCY", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
-                                Text(complaint.urgencyLevel, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color(0xFF7B1FA2))
+                                Text("PRIORITY", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
+                                Text(comp.priorityLabel, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color(0xFF7B1FA2))
                             }
                         }
                     }
                 }
             }
 
-            // Image Gallery placeholder
+            // Image Gallery - real images
             item {
                 Column {
                     Text("Evidence & Nearby Context", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = PrimaryBlue)
                     Spacer(modifier = Modifier.height(8.dp))
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        // Original Citizen Image
-                        item {
-                            Box(
-                                modifier = Modifier
-                                    .size(150.dp)
-                                    .clip(RoundedCornerShape(12.dp))
-                                    .background(Color.LightGray)
-                                    .border(2.dp, PrimaryBlue, RoundedCornerShape(12.dp)),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(Icons.Default.AddAPhoto, contentDescription = null, tint = PrimaryBlue, modifier = Modifier.size(40.dp))
+                    if (comp.images.isNotEmpty()) {
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            items(comp.images) { imageUrl ->
+                                val baseUrl = RetrofitClient.BASE_URL.trimEnd('/')
+                                val fullUrl = if (imageUrl.startsWith("http")) imageUrl else "$baseUrl$imageUrl"
                                 Box(
                                     modifier = Modifier
-                                        .align(Alignment.BottomStart)
-                                        .background(PrimaryBlue)
-                                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                                        .size(150.dp)
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(Color.LightGray)
+                                        .border(2.dp, PrimaryBlue, RoundedCornerShape(12.dp))
+                                        .clickable { fullScreenImageUrl = fullUrl }
                                 ) {
-                                    Text("Citizen Upload", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                    AsyncImage(
+                                        model = fullUrl,
+                                        contentDescription = "Complaint image",
+                                        modifier = Modifier.fillMaxSize(),
+                                        contentScale = ContentScale.Crop
+                                    )
+                                    Box(
+                                        modifier = Modifier
+                                            .align(Alignment.BottomStart)
+                                            .background(PrimaryBlue)
+                                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                                    ) {
+                                        Text("Citizen Upload", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                    }
                                 }
                             }
                         }
-                        
-                        // Grouped Similar Images (Clustered)
-                        items(3) { index ->
-                            Box(
-                                modifier = Modifier
-                                    .size(120.dp)
-                                    .clip(RoundedCornerShape(12.dp))
-                                    .background(Color.LightGray.copy(alpha = 0.5f)),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(Icons.Default.Image, contentDescription = null, tint = Color.Gray, modifier = Modifier.size(32.dp))
-                                Box(
-                                    modifier = Modifier
-                                        .align(Alignment.TopEnd)
-                                        .padding(4.dp)
-                                        .background(Color.Black.copy(alpha = 0.6f), CircleShape)
-                                        .padding(4.dp)
-                                ) {
-                                    Text("AI Match", color = Color.White, fontSize = 8.sp)
-                                }
-                            }
+                    } else {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(100.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(Color.LightGray.copy(alpha = 0.3f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text("No images attached", color = Color.Gray, fontSize = 14.sp)
                         }
                     }
                 }
@@ -288,35 +315,54 @@ fun ComplaintDetailScreen(
                             Text("Location Details", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color.Black)
                         }
                         Spacer(modifier = Modifier.height(8.dp))
-                        Text(text = complaint.location, fontSize = 14.sp, color = Color.DarkGray)
+                        Text(text = comp.locationText ?: "Location not available", fontSize = 14.sp, color = Color.DarkGray)
                         Spacer(modifier = Modifier.height(12.dp))
-                        // Map Preview Placeholder
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(150.dp)
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(Color(0xFFE3F2FD)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Icon(Icons.Default.Map, contentDescription = null, tint = PrimaryBlue, modifier = Modifier.size(40.dp))
-                                Text("Map View Integration", fontSize = 12.sp, color = PrimaryBlue)
-                            }
-                        }
+                        // Map Preview
+                        MapViewCard(
+                            latitude = comp.latitude,
+                            longitude = comp.longitude,
+                            height = 200,
+                            onClick = { showFullMap = true }
+                        )
                     }
                 }
             }
 
-            // Timeline Section
+            // Timeline Section from real history
             item {
                 Column {
                     Text("Complaint Timeline", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = PrimaryBlue)
                     Spacer(modifier = Modifier.height(16.dp))
-                    TimelineItem("Complaint Raised", "Mar 03, 2026 - 09:30 AM", isCompleted = true, isLast = false)
-                    TimelineItem("Officer Assigned", "Awaiting Assignment", isCompleted = false, isLast = false)
-                    TimelineItem("In Progress", "--", isCompleted = false, isLast = false)
-                    TimelineItem("Resolved", "--", isCompleted = false, isLast = true)
+                    if (statusHistory.isNotEmpty()) {
+                        statusHistory.forEachIndexed { index, historyItem ->
+                            TimelineItem(
+                                title = "${historyItem.oldStatus ?: "Created"} -> ${historyItem.newStatus}",
+                                time = historyItem.createdAt ?: "",
+                                isCompleted = true,
+                                isLast = index == statusHistory.lastIndex
+                            )
+                        }
+                    } else {
+                        TimelineItem("Complaint Raised", comp.createdAt ?: "", isCompleted = true, isLast = false)
+                        TimelineItem(comp.statusLabel, comp.updatedAt ?: "Current", isCompleted = comp.status != "UNASSIGNED", isLast = true)
+                    }
+                }
+            }
+
+            // Status update message
+            if (statusUpdateMessage != null) {
+                item {
+                    Surface(
+                        color = if (statusUpdateMessage!!.startsWith("Error")) Color(0xFFFFCDD2) else Color(0xFFC8E6C9),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text(
+                            text = statusUpdateMessage!!,
+                            modifier = Modifier.padding(12.dp).fillMaxWidth(),
+                            fontSize = 14.sp,
+                            color = if (statusUpdateMessage!!.startsWith("Error")) Color(0xFFC62828) else Color(0xFF2E7D32)
+                        )
+                    }
                 }
             }
 
@@ -328,17 +374,49 @@ fun ComplaintDetailScreen(
                         .padding(vertical = 16.dp),
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    OutlinedButton(
-                        onClick = { onUpdateStatus(ComplaintStatus.IN_PROGRESS) },
-                        modifier = Modifier.weight(1f).height(50.dp),
-                        shape = RoundedCornerShape(12.dp),
-                        border = BorderStroke(1.dp, PrimaryBlue),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = PrimaryBlue)
-                    ) {
-                        Text("Start Work", fontWeight = FontWeight.Bold)
+                    if (comp.status == "ASSIGNED") {
+                        OutlinedButton(
+                            onClick = {
+                                scope.launch {
+                                    isUpdatingStatus = true
+                                    statusUpdateMessage = null
+                                    try {
+                                        RetrofitClient.instance.updateComplaintStatus(
+                                            comp.id,
+                                            StatusUpdateRequest(status = "IN_PROGRESS", notes = "Work started by admin")
+                                        )
+                                        complaint = RetrofitClient.instance.getComplaint(complaintId)
+                                        statusHistory = RetrofitClient.instance.getComplaintHistory(complaintId)
+                                        statusUpdateMessage = "Status updated to In Progress"
+                                    } catch (e: Exception) {
+                                        Log.e("ComplaintDetail", "Failed to update status: ${e.message}")
+                                        statusUpdateMessage = "Error: ${e.message ?: "Failed to update status"}"
+                                    } finally {
+                                        isUpdatingStatus = false
+                                    }
+                                }
+                            },
+                            enabled = !isUpdatingStatus,
+                            modifier = Modifier.weight(1f).height(50.dp),
+                            shape = RoundedCornerShape(12.dp),
+                            border = BorderStroke(1.dp, if (isUpdatingStatus) Color.Gray else PrimaryBlue),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = if (isUpdatingStatus) Color.Gray else PrimaryBlue)
+                        ) {
+                            if (isUpdatingStatus) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(20.dp),
+                                    color = PrimaryBlue,
+                                    strokeWidth = 2.dp
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Updating...", fontWeight = FontWeight.Bold)
+                            } else {
+                                Text("Start Work", fontWeight = FontWeight.Bold)
+                            }
+                        }
                     }
                     Button(
-                        onClick = { onResolveClick(complaint.id) }, 
+                        onClick = { onResolveClick(comp.id) },
                         modifier = Modifier.weight(1f).height(50.dp),
                         shape = RoundedCornerShape(12.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue)
@@ -349,6 +427,24 @@ fun ComplaintDetailScreen(
             }
             
             item { Spacer(modifier = Modifier.height(24.dp)) }
+        }
+
+        // Fullscreen image viewer
+        if (fullScreenImageUrl != null) {
+            FullScreenImageViewer(
+                imageUrl = fullScreenImageUrl!!,
+                onDismiss = { fullScreenImageUrl = null }
+            )
+        }
+
+        // Fullscreen map viewer
+        if (showFullMap && complaint != null) {
+            MapLocationPicker(
+                initialLat = complaint!!.latitude,
+                initialLng = complaint!!.longitude,
+                onLocationSelected = { _, _, _ -> showFullMap = false },
+                onDismiss = { showFullMap = false }
+            )
         }
     }
 }

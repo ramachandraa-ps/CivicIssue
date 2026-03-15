@@ -49,7 +49,7 @@ fun PasswordUpdatedScreen(role: String, onBackToLogin: () -> Unit) {
             CenterAlignedTopAppBar(
                 title = {
                     Text(
-                        text = "CivicEye",
+                        text = "CivicIssue",
                         fontSize = 20.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color.Black

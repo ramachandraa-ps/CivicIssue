@@ -13,8 +13,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.*
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -28,7 +26,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.simats.civicissue.ui.theme.PrimaryBlue
 import com.simats.civicissue.ui.theme.BackgroundBlue
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
@@ -39,27 +36,15 @@ fun AdminAIChatbotScreen(
     onBack: () -> Unit = {}
 ) {
     var inputText by remember { mutableStateOf("") }
-    val messages = remember { 
+    var sessionId by remember { mutableStateOf<String?>(null) }
+    val messages = remember {
         mutableStateListOf(
-            ChatMessage(text = "Hello Admin! I'm your AI Management Assistant. How can I help you manage civic issues today?", isUser = false),
-            ChatMessage(text = "You can manage complaints, assign officers, or view system analytics for better decision making.", isUser = false)
+            ChatMessage(text = "Hello Admin! I'm your AI Management Assistant. How can I help you manage civic issues today?", isUser = false)
         )
     }
     val listState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
-    var isVoiceActive by remember { mutableStateOf(false) }
-
-    val imageLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
-    ) { uri ->
-        if (uri != null) {
-            messages.add(ChatMessage(text = "[Document/Image Attached]", isUser = true))
-            coroutineScope.launch {
-                delay(1000)
-                messages.add(ChatMessage(text = "I've received the file. Analyzing documentation for administrative relevance...", isUser = false))
-            }
-        }
-    }
+    var isSending by remember { mutableStateOf(false) }
 
     val quickActions = listOf(
         "Manage Complaints" to Icons.Default.Assignment,
@@ -165,27 +150,6 @@ fun AdminAIChatbotScreen(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    IconButton(onClick = { imageLauncher.launch("application/*,image/*") }) {
-                        Icon(Icons.Default.AttachFile, contentDescription = "Attach", tint = Color.DarkGray)
-                    }
-                    IconButton(onClick = {
-                        isVoiceActive = true
-                        coroutineScope.launch {
-                            delay(2000)
-                            isVoiceActive = false
-                            val mockVoiceText = "Show me urgent pending tasks"
-                            messages.add(ChatMessage(text = mockVoiceText, isUser = true))
-                            delay(1000)
-                            messages.add(ChatMessage(text = "Retrieving urgent pending reports from all departments...", isUser = false))
-                        }
-                    }) {
-                        Icon(
-                            Icons.Default.Mic,
-                            contentDescription = "Voice",
-                            tint = if (isVoiceActive) PrimaryBlue else Color.DarkGray
-                        )
-                    }
-                    
                     OutlinedTextField(
                         value = inputText,
                         onValueChange = { inputText = it },
@@ -212,20 +176,28 @@ fun AdminAIChatbotScreen(
                             .size(48.dp)
                             .clip(CircleShape)
                             .clickable {
-                                if (inputText.isNotBlank()) {
+                                if (inputText.isNotBlank() && !isSending) {
                                     val currentInput = inputText
                                     messages.add(ChatMessage(text = currentInput, isUser = true))
                                     inputText = ""
+                                    isSending = true
                                     coroutineScope.launch {
                                         listState.animateScrollToItem(messages.size - 1)
-                                        delay(1000)
-                                        val response = getAdminBotResponse(currentInput)
-                                        messages.add(ChatMessage(text = response, isUser = false))
+                                        try {
+                                            val response = RetrofitClient.instance.chat(
+                                                ChatRequest(message = currentInput, session_id = sessionId)
+                                            )
+                                            sessionId = response.session_id
+                                            messages.add(ChatMessage(text = response.response, isUser = false))
+                                        } catch (e: Exception) {
+                                            messages.add(ChatMessage(text = "Sorry, I encountered an error. Please try again.", isUser = false))
+                                        }
+                                        isSending = false
                                         listState.animateScrollToItem(messages.size - 1)
                                     }
                                 }
                             },
-                        color = PrimaryBlue
+                        color = if (isSending) Color.Gray else PrimaryBlue
                     ) {
                         Box(contentAlignment = Alignment.Center) {
                             Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send", tint = Color.White)

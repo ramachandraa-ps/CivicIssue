@@ -36,19 +36,18 @@ fun SettingsScreen(
         topBar = {
             TopAppBar(
                 title = {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(onClick = onBack) {
-                            Icon(
-                                Icons.AutoMirrored.Filled.ArrowBack,
-                                contentDescription = "Back",
-                                tint = Color.Black
-                            )
-                        }
-                        Text(
-                            "Settings",
-                            fontSize = 24.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.Black
+                    Text(
+                        "Settings",
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.Black
+                    )
+                },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back"
                         )
                     }
                 },
@@ -105,7 +104,10 @@ fun SettingsScreen(
             Spacer(modifier = Modifier.weight(1f))
             
             Button(
-                onClick = onLogout,
+                onClick = {
+                    TokenManager.clear()
+                    onLogout()
+                },
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(56.dp),

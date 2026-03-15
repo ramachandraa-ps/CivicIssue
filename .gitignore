@@ -1,15 +1,64 @@
+# ===== Android / Gradle =====
 *.iml
 .gradle
 /local.properties
+local.properties
 /.idea/caches
 /.idea/libraries
 /.idea/modules.xml
 /.idea/workspace.xml
 /.idea/navEditor.xml
 /.idea/assetWizardSettings.xml
-.DS_Store
 /build
 /captures
 .externalNativeBuild
 .cxx
-local.properties
+*.apk
+*.aab
+*.ap_
+*.dex
+*.jks
+*.keystore
+
+# ===== Python / Backend =====
+backend/venv/
+backend/__pycache__/
+backend/**/__pycache__/
+backend/**/*.pyc
+backend/**/*.pyo
+*.pyc
+*.pyo
+__pycache__/
+
+# ===== Environment & Secrets =====
+backend/.env
+.env
+*.env
+!backend/.env.example
+
+# ===== Uploaded Files =====
+backend/uploads/*
+!backend/uploads/.gitkeep
+
+# ===== Database =====
+backend/*.db
+backend/*.sqlite3
+
+# ===== OS Files =====
+.DS_Store
+Thumbs.db
+Desktop.ini
+*.swp
+*.swo
+*~
+
+# ===== IDE =====
+.vscode/
+*.code-workspace
+
+# ===== Logs & Temp =====
+backend/*.log
+backend/output.txt
+backend/api_output.txt
+*.log
+*.tmp
