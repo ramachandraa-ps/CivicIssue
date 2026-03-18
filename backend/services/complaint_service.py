@@ -6,6 +6,7 @@ from models.complaint_status_history import ComplaintStatusHistory
 from models.user import User
 from models.notification import Notification
 from models.officer import Officer
+from models.complaint_update import ComplaintUpdate
 from utils.helpers import generate_uuid, generate_complaint_number
 from datetime import datetime, timedelta
 import math
@@ -57,6 +58,26 @@ def _complaint_to_response(db: Session, complaint: Complaint) -> dict:
     )
     image_urls = [img[0] for img in images]
 
+    # Progress updates
+    updates = (
+        db.query(ComplaintUpdate)
+        .filter(ComplaintUpdate.complaint_id == complaint.id)
+        .order_by(ComplaintUpdate.created_at.asc())
+        .all()
+    )
+    update_list = []
+    for u in updates:
+        officer_user = db.query(User).filter(User.id == u.officer_id).first()
+        update_list.append({
+            "id": u.id,
+            "complaint_id": u.complaint_id,
+            "officer_id": u.officer_id,
+            "officer_name": officer_user.full_name if officer_user else None,
+            "message": u.message,
+            "image_url": u.image_url,
+            "created_at": u.created_at,
+        })
+
     return {
         "id": complaint.id,
         "complaint_number": complaint.complaint_number,
@@ -82,6 +103,7 @@ def _complaint_to_response(db: Session, complaint: Complaint) -> dict:
         "resolution_image": complaint.resolution_image,
         "resolved_at": complaint.resolved_at,
         "images": image_urls,
+        "updates": update_list,
         "created_at": complaint.created_at,
         "updated_at": complaint.updated_at,
     }
@@ -193,13 +215,8 @@ def get_complaints(
     if user.role == "citizen":
         query = query.filter(Complaint.citizen_id == user.id)
     elif user.role == "officer":
-        # Officers can see complaints assigned to them as well as unassigned ones
-        query = query.filter(
-            or_(
-                Complaint.assigned_officer_id == user.id,
-                Complaint.assigned_officer_id.is_(None),
-            )
-        )
+        # Officers see only complaints assigned to them
+        query = query.filter(Complaint.assigned_officer_id == user.id)
     # admin sees everything
 
     # Optional filters
@@ -433,6 +450,303 @@ def resolve_complaint(
 
 
 # ---------------------------------------------------------------------------
+# Post complaint update
+# ---------------------------------------------------------------------------
+
+def post_complaint_update(
+    db: Session,
+    complaint_id: str,
+    officer_id: str,
+    message: str,
+    image_url: str = None,
+) -> dict:
+    """Officer posts a progress update on a complaint."""
+    complaint = db.query(Complaint).filter(Complaint.id == complaint_id).first()
+    if not complaint:
+        return None
+
+    if complaint.assigned_officer_id != officer_id:
+        return "NOT_ASSIGNED"
+
+    # Auto-transition ASSIGNED -> IN_PROGRESS when officer posts first update
+    if complaint.status == "ASSIGNED":
+        old_status = complaint.status
+        complaint.status = "IN_PROGRESS"
+        history = ComplaintStatusHistory(
+            id=generate_uuid(),
+            complaint_id=complaint_id,
+            old_status=old_status,
+            new_status="IN_PROGRESS",
+            changed_by=officer_id,
+            notes="Auto-transitioned: officer posted progress update",
+        )
+        db.add(history)
+
+    update = ComplaintUpdate(
+        id=generate_uuid(),
+        complaint_id=complaint_id,
+        officer_id=officer_id,
+        message=message,
+        image_url=image_url,
+    )
+    db.add(update)
+
+    # Notify citizen about the progress update
+    notif = Notification(
+        id=generate_uuid(),
+        recipient_id=complaint.citizen_id,
+        complaint_id=complaint_id,
+        title="Progress update on your complaint",
+        message=f"Officer update on '{complaint.title}': {message[:100]}",
+        type="STATUS_UPDATE",
+        priority="LOW",
+        image_url=image_url,
+    )
+    db.add(notif)
+
+    db.commit()
+    db.refresh(update)
+
+    officer_user = db.query(User).filter(User.id == officer_id).first()
+    return {
+        "id": update.id,
+        "complaint_id": update.complaint_id,
+        "officer_id": update.officer_id,
+        "officer_name": officer_user.full_name if officer_user else None,
+        "message": update.message,
+        "image_url": update.image_url,
+        "created_at": update.created_at,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Get complaint updates
+# ---------------------------------------------------------------------------
+
+def get_complaint_updates(db: Session, complaint_id: str) -> list:
+    """Return all progress updates for a complaint."""
+    updates = (
+        db.query(ComplaintUpdate)
+        .filter(ComplaintUpdate.complaint_id == complaint_id)
+        .order_by(ComplaintUpdate.created_at.asc())
+        .all()
+    )
+    result = []
+    for u in updates:
+        officer_user = db.query(User).filter(User.id == u.officer_id).first()
+        result.append({
+            "id": u.id,
+            "complaint_id": u.complaint_id,
+            "officer_id": u.officer_id,
+            "officer_name": officer_user.full_name if officer_user else None,
+            "message": u.message,
+            "image_url": u.image_url,
+            "created_at": u.created_at,
+        })
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Complete complaint
+# ---------------------------------------------------------------------------
+
+def complete_complaint(
+    db: Session,
+    complaint_id: str,
+    officer_id: str,
+    notes: str,
+    resolution_image: str = None,
+) -> Complaint:
+    """Officer marks a complaint as COMPLETED with proof. Awaits admin review."""
+    complaint = db.query(Complaint).filter(Complaint.id == complaint_id).first()
+    if not complaint:
+        return None
+
+    if complaint.assigned_officer_id != officer_id:
+        return "NOT_ASSIGNED"
+
+    if complaint.status not in ("ASSIGNED", "IN_PROGRESS", "REWORK"):
+        return "INVALID_STATUS"
+
+    old_status = complaint.status
+    complaint.status = "COMPLETED"
+    complaint.resolution_notes = notes
+    complaint.resolution_image = resolution_image
+
+    history = ComplaintStatusHistory(
+        id=generate_uuid(),
+        complaint_id=complaint_id,
+        old_status=old_status,
+        new_status="COMPLETED",
+        changed_by=officer_id,
+        notes=notes,
+    )
+    db.add(history)
+
+    # Notify all admins for review
+    admins = db.query(User).filter(User.role == "admin").all()
+    for admin in admins:
+        notif = Notification(
+            id=generate_uuid(),
+            recipient_id=admin.id,
+            complaint_id=complaint_id,
+            title="Complaint ready for review",
+            message=f"Officer has marked complaint '{complaint.title}' as completed. Please review.",
+            type="STATUS_UPDATE",
+            priority="HIGH",
+            image_url=resolution_image,
+        )
+        db.add(notif)
+
+    # Notify citizen
+    citizen_notif = Notification(
+        id=generate_uuid(),
+        recipient_id=complaint.citizen_id,
+        complaint_id=complaint_id,
+        title="Work completed on your complaint",
+        message=f"The officer has completed work on '{complaint.title}'. Awaiting admin review.",
+        type="STATUS_UPDATE",
+        priority="MEDIUM",
+        image_url=resolution_image,
+    )
+    db.add(citizen_notif)
+
+    db.commit()
+    db.refresh(complaint)
+    return complaint
+
+
+# ---------------------------------------------------------------------------
+# Approve complaint
+# ---------------------------------------------------------------------------
+
+def approve_complaint(
+    db: Session,
+    complaint_id: str,
+    admin_id: str,
+) -> Complaint:
+    """Admin approves a completed complaint, marking it RESOLVED."""
+    complaint = db.query(Complaint).filter(Complaint.id == complaint_id).first()
+    if not complaint:
+        return None
+
+    if complaint.status != "COMPLETED":
+        return "INVALID_STATUS"
+
+    old_status = complaint.status
+    complaint.status = "RESOLVED"
+    complaint.resolved_at = datetime.utcnow()
+
+    if complaint.assigned_officer_id:
+        officer = (
+            db.query(Officer)
+            .filter(Officer.user_id == complaint.assigned_officer_id)
+            .first()
+        )
+        if officer and officer.workload_count and officer.workload_count > 0:
+            officer.workload_count -= 1
+
+    history = ComplaintStatusHistory(
+        id=generate_uuid(),
+        complaint_id=complaint_id,
+        old_status=old_status,
+        new_status="RESOLVED",
+        changed_by=admin_id,
+        notes="Approved by admin",
+    )
+    db.add(history)
+
+    citizen_notif = Notification(
+        id=generate_uuid(),
+        recipient_id=complaint.citizen_id,
+        complaint_id=complaint_id,
+        title="Your complaint has been resolved",
+        message=f"Your complaint '{complaint.title}' has been approved and resolved.",
+        type="RESOLUTION",
+        priority="HIGH",
+        image_url=complaint.resolution_image,
+    )
+    db.add(citizen_notif)
+
+    if complaint.assigned_officer_id:
+        officer_notif = Notification(
+            id=generate_uuid(),
+            recipient_id=complaint.assigned_officer_id,
+            complaint_id=complaint_id,
+            title="Your work has been approved",
+            message=f"Admin has approved your work on '{complaint.title}'.",
+            type="RESOLUTION",
+            priority="MEDIUM",
+        )
+        db.add(officer_notif)
+
+    db.commit()
+    db.refresh(complaint)
+    return complaint
+
+
+# ---------------------------------------------------------------------------
+# Rework complaint
+# ---------------------------------------------------------------------------
+
+def rework_complaint(
+    db: Session,
+    complaint_id: str,
+    admin_id: str,
+    reason: str,
+) -> Complaint:
+    """Admin requests rework on a completed complaint."""
+    complaint = db.query(Complaint).filter(Complaint.id == complaint_id).first()
+    if not complaint:
+        return None
+
+    if complaint.status != "COMPLETED":
+        return "INVALID_STATUS"
+
+    old_status = complaint.status
+    complaint.status = "REWORK"
+    complaint.resolution_notes = None
+    complaint.resolution_image = None
+
+    history = ComplaintStatusHistory(
+        id=generate_uuid(),
+        complaint_id=complaint_id,
+        old_status=old_status,
+        new_status="REWORK",
+        changed_by=admin_id,
+        notes=f"Rework requested: {reason}",
+    )
+    db.add(history)
+
+    if complaint.assigned_officer_id:
+        officer_notif = Notification(
+            id=generate_uuid(),
+            recipient_id=complaint.assigned_officer_id,
+            complaint_id=complaint_id,
+            title="Rework requested on your task",
+            message=f"Admin has requested rework on '{complaint.title}': {reason}",
+            type="STATUS_UPDATE",
+            priority="HIGH",
+        )
+        db.add(officer_notif)
+
+    citizen_notif = Notification(
+        id=generate_uuid(),
+        recipient_id=complaint.citizen_id,
+        complaint_id=complaint_id,
+        title="Complaint requires additional work",
+        message=f"Additional work has been requested on your complaint '{complaint.title}'.",
+        type="STATUS_UPDATE",
+        priority="MEDIUM",
+    )
+    db.add(citizen_notif)
+
+    db.commit()
+    db.refresh(complaint)
+    return complaint
+
+
+# ---------------------------------------------------------------------------
 # Status history
 # ---------------------------------------------------------------------------
 
@@ -531,6 +845,7 @@ def get_stats(db: Session) -> dict:
     in_progress = _count_status("IN_PROGRESS")
     resolved = _count_status("RESOLVED")
     completed = _count_status("COMPLETED")
+    rework = _count_status("REWORK")
 
     # By category
     cat_rows = (
@@ -564,6 +879,7 @@ def get_stats(db: Session) -> dict:
         "in_progress": in_progress,
         "resolved": resolved,
         "completed": completed,
+        "rework": rework,
         "by_category": by_category,
         "by_severity": by_severity,
         "recent_7_days": recent_7_days,

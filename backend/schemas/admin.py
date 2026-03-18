@@ -77,7 +77,29 @@ class DashboardStats(BaseModel):
     in_progress: int
     resolved: int
     completed: int
+    rework: int = 0
     by_category: dict
     by_severity: dict
     recent_7_days: int
     resolution_rate: float
+
+
+class OfficerStats(BaseModel):
+    officer_id: str
+    user_id: str
+    full_name: str
+    email: str
+    department: Optional[str] = None
+    designation: Optional[str] = None
+    workload_count: int
+    is_available: bool
+    total_assigned: int = 0
+    total_completed: int = 0
+    total_rework: int = 0
+    avg_resolution_hours: Optional[float] = None
+
+
+class OfficerUpdate(BaseModel):
+    department: Optional[str] = None
+    designation: Optional[str] = None
+    is_available: Optional[bool] = None

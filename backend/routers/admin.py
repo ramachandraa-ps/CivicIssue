@@ -19,6 +19,8 @@ from schemas.admin import (
     OfficerResponse,
     SystemLogResponse,
     DashboardStats,
+    OfficerStats,
+    OfficerUpdate,
 )
 from utils.security import hash_password
 from utils.helpers import generate_uuid
@@ -383,6 +385,193 @@ def create_officer(
     )
 
 
+# ---------------------------------------------------------------------------
+# Update officer details
+# ---------------------------------------------------------------------------
+@router.put("/officers/{officer_id}", response_model=OfficerResponse)
+def update_officer(
+    officer_id: str,
+    payload: OfficerUpdate,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """Update an officer's department, designation, or availability."""
+    officer = db.query(Officer).filter(Officer.id == officer_id).first()
+    if not officer:
+        raise HTTPException(status_code=404, detail="Officer not found")
+
+    user = db.query(User).filter(User.id == officer.user_id).first()
+
+    if payload.department is not None:
+        officer.department = payload.department
+    if payload.designation is not None:
+        officer.designation = payload.designation
+    if payload.is_available is not None:
+        officer.is_available = payload.is_available
+
+    db.commit()
+    db.refresh(officer)
+
+    create_system_log(
+        db,
+        action="UPDATE_OFFICER",
+        entity_type="officer",
+        entity_id=officer.id,
+        performed_by=admin.id,
+        details={"full_name": user.full_name if user else "Unknown"},
+    )
+
+    return OfficerResponse(
+        id=officer.id,
+        user_id=officer.user_id,
+        full_name=user.full_name if user else "",
+        email=user.email if user else "",
+        department=officer.department,
+        designation=officer.designation,
+        workload_count=officer.workload_count,
+        is_available=officer.is_available,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Toggle officer availability
+# ---------------------------------------------------------------------------
+@router.put("/officers/{officer_id}/availability", response_model=OfficerResponse)
+def toggle_officer_availability(
+    officer_id: str,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """Toggle an officer's availability status."""
+    officer = db.query(Officer).filter(Officer.id == officer_id).first()
+    if not officer:
+        raise HTTPException(status_code=404, detail="Officer not found")
+
+    user = db.query(User).filter(User.id == officer.user_id).first()
+    officer.is_available = not officer.is_available
+    db.commit()
+    db.refresh(officer)
+
+    return OfficerResponse(
+        id=officer.id,
+        user_id=officer.user_id,
+        full_name=user.full_name if user else "",
+        email=user.email if user else "",
+        department=officer.department,
+        designation=officer.designation,
+        workload_count=officer.workload_count,
+        is_available=officer.is_available,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Officer performance stats
+# ---------------------------------------------------------------------------
+@router.get("/officers/{officer_id}/stats", response_model=OfficerStats)
+def get_officer_stats(
+    officer_id: str,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """Get detailed performance stats for a specific officer."""
+    officer = db.query(Officer).filter(Officer.id == officer_id).first()
+    if not officer:
+        raise HTTPException(status_code=404, detail="Officer not found")
+
+    user = db.query(User).filter(User.id == officer.user_id).first()
+
+    total_assigned = (
+        db.query(func.count(Complaint.id))
+        .filter(Complaint.assigned_officer_id == officer.user_id)
+        .scalar() or 0
+    )
+    total_completed = (
+        db.query(func.count(Complaint.id))
+        .filter(
+            Complaint.assigned_officer_id == officer.user_id,
+            Complaint.status == "RESOLVED",
+        )
+        .scalar() or 0
+    )
+
+    from models.complaint_status_history import ComplaintStatusHistory
+    total_rework = (
+        db.query(func.count(ComplaintStatusHistory.id))
+        .join(Complaint, ComplaintStatusHistory.complaint_id == Complaint.id)
+        .filter(
+            Complaint.assigned_officer_id == officer.user_id,
+            ComplaintStatusHistory.new_status == "REWORK",
+        )
+        .scalar() or 0
+    )
+
+    resolved_complaints = (
+        db.query(Complaint)
+        .filter(
+            Complaint.assigned_officer_id == officer.user_id,
+            Complaint.status == "RESOLVED",
+            Complaint.resolved_at.isnot(None),
+        )
+        .all()
+    )
+    avg_hours = None
+    if resolved_complaints:
+        total_hours = sum(
+            (c.resolved_at - c.created_at).total_seconds() / 3600
+            for c in resolved_complaints
+            if c.resolved_at and c.created_at
+        )
+        avg_hours = round(total_hours / len(resolved_complaints), 1)
+
+    return OfficerStats(
+        officer_id=officer.id,
+        user_id=officer.user_id,
+        full_name=user.full_name if user else "",
+        email=user.email if user else "",
+        department=officer.department,
+        designation=officer.designation,
+        workload_count=officer.workload_count,
+        is_available=officer.is_available,
+        total_assigned=total_assigned,
+        total_completed=total_completed,
+        total_rework=total_rework,
+        avg_resolution_hours=avg_hours,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Officer's complaints list
+# ---------------------------------------------------------------------------
+@router.get("/officers/{officer_id}/complaints")
+def get_officer_complaints(
+    officer_id: str,
+    status: str = None,
+    page: int = 1,
+    limit: int = 20,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """Get all complaints assigned to a specific officer."""
+    officer = db.query(Officer).filter(Officer.id == officer_id).first()
+    if not officer:
+        raise HTTPException(status_code=404, detail="Officer not found")
+
+    query = db.query(Complaint).filter(Complaint.assigned_officer_id == officer.user_id)
+    if status:
+        query = query.filter(Complaint.status == status)
+
+    total = query.count()
+    query = query.order_by(Complaint.created_at.desc())
+    offset = (page - 1) * limit
+    complaints = query.offset(offset).limit(limit).all()
+    pages = math.ceil(total / limit) if limit else 1
+
+    from services.complaint_service import _complaint_to_response
+    items = [_complaint_to_response(db, c) for c in complaints]
+
+    return {"items": items, "total": total, "page": page, "limit": limit, "pages": pages}
+
+
 # ===================================================================
 # SYSTEM LOGS
 # ===================================================================
@@ -476,6 +665,11 @@ def get_dashboard_stats(
         .filter(Complaint.status == "COMPLETED")
         .scalar() or 0
     )
+    rework = (
+        db.query(func.count(Complaint.id))
+        .filter(Complaint.status == "REWORK")
+        .scalar() or 0
+    )
 
     # By category
     category_rows = (
@@ -513,6 +707,7 @@ def get_dashboard_stats(
         in_progress=in_progress,
         resolved=resolved,
         completed=completed,
+        rework=rework,
         by_category=by_category,
         by_severity=by_severity,
         recent_7_days=recent_7_days,

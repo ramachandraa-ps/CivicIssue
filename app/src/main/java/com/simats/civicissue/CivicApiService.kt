@@ -28,6 +28,34 @@ interface CivicApiService {
     @GET("api/complaints/{id}/history") suspend fun getComplaintHistory(@Path("id") id: String): List<StatusHistoryItem>
     @GET("api/complaints/{id}/similar") suspend fun getSimilarComplaints(@Path("id") id: String): List<Complaint>
 
+    // Officer workflow
+    @Multipart
+    @POST("api/complaints/{id}/updates") suspend fun postComplaintUpdate(
+        @Path("id") id: String,
+        @Part image: MultipartBody.Part? = null,
+        @Part("message") message: RequestBody
+    ): ComplaintUpdate
+
+    @GET("api/complaints/{id}/updates") suspend fun getComplaintUpdates(
+        @Path("id") id: String
+    ): List<ComplaintUpdate>
+
+    @Multipart
+    @PUT("api/complaints/{id}/complete") suspend fun completeComplaint(
+        @Path("id") id: String,
+        @Part image: MultipartBody.Part? = null,
+        @Part("notes") notes: RequestBody
+    ): Complaint
+
+    @PUT("api/complaints/{id}/approve") suspend fun approveComplaint(
+        @Path("id") id: String
+    ): Complaint
+
+    @PUT("api/complaints/{id}/rework") suspend fun reworkComplaint(
+        @Path("id") id: String,
+        @Body body: ReworkRequest
+    ): Complaint
+
     // Images & AI
     @Multipart
     @POST("api/images/upload") suspend fun uploadImage(@Part image: MultipartBody.Part): Map<String, String>
@@ -60,6 +88,24 @@ interface CivicApiService {
     @DELETE("api/admin/departments/{id}") suspend fun deleteDepartment(@Path("id") id: String): Map<String, String>
     @GET("api/admin/officers") suspend fun getOfficers(): List<Officer>
     @POST("api/admin/officers") suspend fun createOfficer(@Body body: OfficerCreateRequest): Officer
+    @PUT("api/admin/officers/{id}") suspend fun updateOfficer(
+        @Path("id") id: String,
+        @Body body: OfficerUpdate
+    ): Officer
+
+    @PUT("api/admin/officers/{id}/availability") suspend fun toggleOfficerAvailability(
+        @Path("id") id: String
+    ): Officer
+
+    @GET("api/admin/officers/{id}/stats") suspend fun getOfficerStats(
+        @Path("id") id: String
+    ): OfficerStats
+
+    @GET("api/admin/officers/{id}/complaints") suspend fun getOfficerComplaints(
+        @Path("id") id: String,
+        @QueryMap params: Map<String, String> = emptyMap()
+    ): PaginatedResponse<Complaint>
+
     @GET("api/admin/system-logs") suspend fun getSystemLogs(@QueryMap params: Map<String, String> = emptyMap()): PaginatedResponse<SystemLogItem>
     @GET("api/admin/dashboard-stats") suspend fun getDashboardStats(): DashboardStats
 

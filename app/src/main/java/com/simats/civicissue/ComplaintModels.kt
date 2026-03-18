@@ -29,7 +29,8 @@ data class Complaint(
     @SerializedName("resolution_image") val resolutionImage: String? = null,
     val images: List<String> = emptyList(),
     @SerializedName("created_at") val createdAt: String? = null,
-    @SerializedName("updated_at") val updatedAt: String? = null
+    @SerializedName("updated_at") val updatedAt: String? = null,
+    val updates: List<ComplaintUpdate> = emptyList()
 )
 
 // Helper extensions for UI color mapping
@@ -40,12 +41,23 @@ val Complaint.priorityColor: Color get() = when (priority) {
     else -> Color(0xFF9E9E9E)
 }
 
+val Complaint.statusColor: Color get() = when (status) {
+    "UNASSIGNED" -> Color(0xFF9E9E9E)
+    "ASSIGNED" -> Color(0xFF1976D2)
+    "IN_PROGRESS" -> Color(0xFFF9A825)
+    "COMPLETED" -> Color(0xFF388E3C)
+    "RESOLVED" -> Color(0xFF2E7D32)
+    "REWORK" -> Color(0xFFD32F2F)
+    else -> Color(0xFF9E9E9E)
+}
+
 val Complaint.statusLabel: String get() = when (status) {
     "UNASSIGNED" -> "Unassigned"
     "ASSIGNED" -> "Assigned"
     "IN_PROGRESS" -> "In Progress"
     "COMPLETED" -> "Completed"
     "RESOLVED" -> "Resolved"
+    "REWORK" -> "Rework Required"
     else -> status
 }
 
@@ -68,7 +80,8 @@ enum class ComplaintStatus(val label: String) {
     ASSIGNED("Assigned"),
     IN_PROGRESS("In Progress"),
     COMPLETED("Completed"),
-    RESOLVED("Resolved")
+    RESOLVED("Resolved"),
+    REWORK("Rework Required")
 }
 
 // ===== Paginated Response =====
@@ -134,7 +147,9 @@ data class UserProfile(
     val country_code: String? = null,
     val role: String = "",
     val avatar_url: String? = null,
-    val is_verified: Boolean = false
+    val is_verified: Boolean = false,
+    val department: String? = null,
+    val designation: String? = null
 )
 
 data class VerifyEmailRequest(val email: String, val otp_code: String)
@@ -190,6 +205,7 @@ data class DashboardStats(
     @SerializedName("in_progress") val inProgress: Int = 0,
     val resolved: Int = 0,
     val completed: Int = 0,
+    val rework: Int = 0,
     @SerializedName("by_category") val byCategory: Map<String, Int> = emptyMap(),
     @SerializedName("by_severity") val bySeverity: Map<String, Int> = emptyMap(),
     @SerializedName("recent_7_days") val recent7Days: Int = 0,
@@ -241,6 +257,43 @@ data class IssueGroupItem(
     @SerializedName("complaint_count") val complaintCount: Int = 0,
     @SerializedName("avg_severity") val avgSeverity: String? = null,
     val status: String = ""
+)
+
+// ===== Complaint Updates (Officer Progress) =====
+data class ComplaintUpdate(
+    val id: String = "",
+    @SerializedName("complaint_id") val complaintId: String = "",
+    @SerializedName("officer_id") val officerId: String = "",
+    @SerializedName("officer_name") val officerName: String? = null,
+    val message: String = "",
+    @SerializedName("image_url") val imageUrl: String? = null,
+    @SerializedName("created_at") val createdAt: String? = null
+)
+
+// Request models for officer actions
+data class CompleteComplaintRequest(val notes: String, val resolution_image: String? = null)
+data class ReworkRequest(val reason: String)
+
+// Officer stats
+data class OfficerStats(
+    @SerializedName("officer_id") val officerId: String = "",
+    @SerializedName("user_id") val userId: String = "",
+    @SerializedName("full_name") val fullName: String = "",
+    val email: String = "",
+    val department: String? = null,
+    val designation: String? = null,
+    @SerializedName("workload_count") val workloadCount: Int = 0,
+    @SerializedName("is_available") val isAvailable: Boolean = true,
+    @SerializedName("total_assigned") val totalAssigned: Int = 0,
+    @SerializedName("total_completed") val totalCompleted: Int = 0,
+    @SerializedName("total_rework") val totalRework: Int = 0,
+    @SerializedName("avg_resolution_hours") val avgResolutionHours: Float? = null
+)
+
+data class OfficerUpdate(
+    val department: String? = null,
+    val designation: String? = null,
+    val is_available: Boolean? = null
 )
 
 // Request models for admin actions

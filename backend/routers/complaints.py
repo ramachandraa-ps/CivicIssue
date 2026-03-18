@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from sqlalchemy.orm import Session
 from database import get_db
-from middleware.auth import get_current_user, require_admin
+from middleware.auth import get_current_user, require_admin, require_officer
 from models.user import User
 from schemas.complaint import (
     ComplaintCreate,
@@ -13,6 +13,10 @@ from schemas.complaint import (
     ComplaintStats,
     StatusHistoryResponse,
     MapDataResponse,
+    ComplaintUpdateCreate,
+    ComplaintUpdateResponse,
+    CompleteComplaintRequest,
+    ReworkRequest,
 )
 from services.complaint_service import (
     create_complaint,
@@ -25,6 +29,11 @@ from services.complaint_service import (
     get_similar_complaints,
     get_map_data,
     get_stats,
+    post_complaint_update,
+    get_complaint_updates,
+    complete_complaint,
+    approve_complaint,
+    rework_complaint,
 )
 from config import settings
 from typing import List, Optional
@@ -167,15 +176,23 @@ def change_status(
     complaint_id: str,
     body: StatusUpdateRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(require_officer),
 ):
-    """Change the status of a complaint.  Admin only."""
-    valid_statuses = {"UNASSIGNED", "ASSIGNED", "IN_PROGRESS", "COMPLETED", "RESOLVED"}
+    """Change the status of a complaint. Admin or assigned officer."""
+    valid_statuses = {"UNASSIGNED", "ASSIGNED", "IN_PROGRESS", "COMPLETED", "RESOLVED", "REWORK"}
     if body.status not in valid_statuses:
         raise HTTPException(
             status_code=400,
             detail=f"Invalid status. Must be one of: {', '.join(sorted(valid_statuses))}",
         )
+
+    # Officers can only change status of their assigned complaints to IN_PROGRESS
+    if current_user.role == "officer":
+        complaint_data = get_complaint_by_id(db, complaint_id)
+        if not complaint_data or complaint_data.get("assigned_officer_id") != current_user.id:
+            raise HTTPException(status_code=403, detail="You are not assigned to this complaint")
+        if body.status not in ("IN_PROGRESS",):
+            raise HTTPException(status_code=403, detail="Officers can only set status to IN_PROGRESS")
 
     complaint = update_status(
         db=db,
@@ -274,3 +291,145 @@ def similar_complaints(
         raise HTTPException(status_code=404, detail="Complaint not found")
 
     return get_similar_complaints(db, complaint_id)
+
+
+# ---------------------------------------------------------------------------
+# 11. POST /{id}/updates -- Officer posts a progress update
+# ---------------------------------------------------------------------------
+@router.post("/{complaint_id}/updates", response_model=ComplaintUpdateResponse)
+async def create_complaint_update(
+    complaint_id: str,
+    image: UploadFile = File(default=None),
+    message: str = Form(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_officer),
+):
+    """Officer posts a progress update with optional image."""
+    image_url = None
+    if image:
+        content = await image.read()
+        max_bytes = settings.MAX_FILE_SIZE_MB * 1024 * 1024
+        if len(content) > max_bytes:
+            raise HTTPException(status_code=400, detail=f"File exceeds {settings.MAX_FILE_SIZE_MB}MB limit")
+        ext = os.path.splitext(image.filename or "file.jpg")[1] or ".jpg"
+        filename = f"{uuid.uuid4()}{ext}"
+        upload_dir = settings.UPLOAD_DIR
+        os.makedirs(upload_dir, exist_ok=True)
+        filepath = os.path.join(upload_dir, filename)
+        with open(filepath, "wb") as f:
+            f.write(content)
+        image_url = f"/uploads/{filename}"
+
+    result = post_complaint_update(
+        db=db,
+        complaint_id=complaint_id,
+        officer_id=current_user.id,
+        message=message,
+        image_url=image_url,
+    )
+    if result is None:
+        raise HTTPException(status_code=404, detail="Complaint not found")
+    if result == "NOT_ASSIGNED":
+        raise HTTPException(status_code=403, detail="You are not assigned to this complaint")
+    return result
+
+
+# ---------------------------------------------------------------------------
+# 12. GET /{id}/updates -- Get all progress updates for a complaint
+# ---------------------------------------------------------------------------
+@router.get("/{complaint_id}/updates", response_model=List[ComplaintUpdateResponse])
+def list_complaint_updates(
+    complaint_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Get all progress updates for a complaint. Visible to all roles."""
+    complaint = get_complaint_by_id(db, complaint_id)
+    if not complaint:
+        raise HTTPException(status_code=404, detail="Complaint not found")
+    return get_complaint_updates(db, complaint_id)
+
+
+# ---------------------------------------------------------------------------
+# 13. PUT /{id}/complete -- Officer marks complaint as completed
+# ---------------------------------------------------------------------------
+@router.put("/{complaint_id}/complete", response_model=ComplaintResponse)
+async def officer_complete_complaint(
+    complaint_id: str,
+    image: UploadFile = File(default=None),
+    notes: str = Form(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_officer),
+):
+    """Officer marks complaint as completed with notes and optional proof image."""
+    resolution_image = None
+    if image:
+        content = await image.read()
+        max_bytes = settings.MAX_FILE_SIZE_MB * 1024 * 1024
+        if len(content) > max_bytes:
+            raise HTTPException(status_code=400, detail=f"File exceeds {settings.MAX_FILE_SIZE_MB}MB limit")
+        ext = os.path.splitext(image.filename or "file.jpg")[1] or ".jpg"
+        filename = f"{uuid.uuid4()}{ext}"
+        upload_dir = settings.UPLOAD_DIR
+        os.makedirs(upload_dir, exist_ok=True)
+        filepath = os.path.join(upload_dir, filename)
+        with open(filepath, "wb") as f:
+            f.write(content)
+        resolution_image = f"/uploads/{filename}"
+
+    result = complete_complaint(
+        db=db,
+        complaint_id=complaint_id,
+        officer_id=current_user.id,
+        notes=notes,
+        resolution_image=resolution_image,
+    )
+    if result is None:
+        raise HTTPException(status_code=404, detail="Complaint not found")
+    if result == "NOT_ASSIGNED":
+        raise HTTPException(status_code=403, detail="You are not assigned to this complaint")
+    if result == "INVALID_STATUS":
+        raise HTTPException(status_code=400, detail="Complaint cannot be completed from its current status")
+    return get_complaint_by_id(db, result.id)
+
+
+# ---------------------------------------------------------------------------
+# 14. PUT /{id}/approve -- Admin approves completed complaint
+# ---------------------------------------------------------------------------
+@router.put("/{complaint_id}/approve", response_model=ComplaintResponse)
+def admin_approve_complaint(
+    complaint_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    """Admin approves a completed complaint, marking it RESOLVED."""
+    result = approve_complaint(db=db, complaint_id=complaint_id, admin_id=current_user.id)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Complaint not found")
+    if result == "INVALID_STATUS":
+        raise HTTPException(status_code=400, detail="Only COMPLETED complaints can be approved")
+    return get_complaint_by_id(db, result.id)
+
+
+# ---------------------------------------------------------------------------
+# 15. PUT /{id}/rework -- Admin requests rework
+# ---------------------------------------------------------------------------
+@router.put("/{complaint_id}/rework", response_model=ComplaintResponse)
+def admin_rework_complaint(
+    complaint_id: str,
+    body: ReworkRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    """Admin requests rework on a completed complaint."""
+    result = rework_complaint(
+        db=db,
+        complaint_id=complaint_id,
+        admin_id=current_user.id,
+        reason=body.reason,
+    )
+    if result is None:
+        raise HTTPException(status_code=404, detail="Complaint not found")
+    if result == "INVALID_STATUS":
+        raise HTTPException(status_code=400, detail="Only COMPLETED complaints can be sent for rework")
+    return get_complaint_by_id(db, result.id)

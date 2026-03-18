@@ -17,6 +17,7 @@ fun StatusBadge(status: ComplaintStatus) {
         ComplaintStatus.RESOLVED, ComplaintStatus.COMPLETED -> Color(0xFF4CAF50)
         ComplaintStatus.IN_PROGRESS, ComplaintStatus.ASSIGNED -> Color(0xFF2196F3)
         ComplaintStatus.UNASSIGNED -> Color(0xFFFFA000)
+        ComplaintStatus.REWORK -> Color(0xFFE53935)
     }
     Surface(
         color = color.copy(alpha = 0.1f),

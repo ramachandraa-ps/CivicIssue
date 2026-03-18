@@ -46,12 +46,14 @@ class MainActivity : ComponentActivity() {
                             onSignUp = { navController.navigate("signup") },
                             onForgotPassword = { navController.navigate("reset_password/$role") },
                             onLoginSuccess = { userRole ->
-                                if (userRole == "admin") {
-                                    navController.navigate("admin_dashboard") {
+                                when (userRole) {
+                                    "admin" -> navController.navigate("admin_dashboard") {
                                         popUpTo(0) { inclusive = true }
                                     }
-                                } else {
-                                    navController.navigate("citizen_dashboard") {
+                                    "officer" -> navController.navigate("officer_dashboard") {
+                                        popUpTo(0) { inclusive = true }
+                                    }
+                                    else -> navController.navigate("citizen_dashboard") {
                                         popUpTo(0) { inclusive = true }
                                     }
                                 }
@@ -238,8 +240,11 @@ class MainActivity : ComponentActivity() {
                                 navController.navigate("assign_officer/$complaintId") 
                             },
                             onUpdateStatus = { status -> /* update status */ },
-                            onResolveClick = { id -> 
+                            onResolveClick = { id ->
                                 navController.navigate("admin_resolve_issue/$id")
+                            },
+                            onReviewClick = { id ->
+                                navController.navigate("admin_review/$id")
                             }
                         )
                     }
@@ -261,11 +266,129 @@ class MainActivity : ComponentActivity() {
                         AdminResolveIssueScreen(
                             complaintId = complaintId,
                             onBack = { navController.popBackStack() },
-                            onResolveSuccess = { 
+                            onResolveSuccess = {
                                 navController.navigate("admin_dashboard") {
                                     popUpTo("admin_dashboard") { inclusive = true }
                                 }
                             }
+                        )
+                    }
+
+                    // ===== OFFICER ROUTES =====
+                    composable("officer_dashboard") {
+                        OfficerDashboardScreen(
+                            onNotificationsClick = { navController.navigate("officer_notifications") },
+                            onProfileClick = { navController.navigate("officer_profile") },
+                            onComplaintClick = { complaintId ->
+                                navController.navigate("officer_complaint_detail/$complaintId")
+                            },
+                            onLogoutClick = { navController.navigate("logout") }
+                        )
+                    }
+
+                    composable("officer_complaint_detail/{complaintId}") { backStackEntry ->
+                        val complaintId = backStackEntry.arguments?.getString("complaintId") ?: ""
+                        OfficerComplaintDetailScreen(
+                            complaintId = complaintId,
+                            onBack = { navController.popBackStack() },
+                            onPostUpdate = { navController.navigate("officer_post_update/$complaintId") },
+                            onComplete = { navController.navigate("officer_complete/$complaintId") }
+                        )
+                    }
+
+                    composable("officer_post_update/{complaintId}") { backStackEntry ->
+                        val complaintId = backStackEntry.arguments?.getString("complaintId") ?: ""
+                        OfficerPostUpdateScreen(
+                            complaintId = complaintId,
+                            onBack = { navController.popBackStack() },
+                            onSuccess = { navController.popBackStack() }
+                        )
+                    }
+
+                    composable("officer_complete/{complaintId}") { backStackEntry ->
+                        val complaintId = backStackEntry.arguments?.getString("complaintId") ?: ""
+                        OfficerCompleteScreen(
+                            complaintId = complaintId,
+                            onBack = { navController.popBackStack() },
+                            onSuccess = {
+                                navController.navigate("officer_dashboard") {
+                                    popUpTo("officer_dashboard") { inclusive = true }
+                                }
+                            }
+                        )
+                    }
+
+                    composable("officer_notifications") {
+                        OfficerNotificationScreen(
+                            onBack = { navController.popBackStack() }
+                        )
+                    }
+
+                    composable("officer_profile") {
+                        OfficerProfileScreen(
+                            onBack = { navController.popBackStack() },
+                            onEditProfile = { navController.navigate("edit_profile") },
+                            onChangePassword = { navController.navigate("officer_change_password") },
+                            onLogoutClick = {
+                                TokenManager.clear()
+                                navController.navigate("role_selection") {
+                                    popUpTo(0) { inclusive = true }
+                                }
+                            }
+                        )
+                    }
+
+                    composable("officer_change_password") {
+                        ChangePasswordScreen(
+                            onBack = { navController.popBackStack() },
+                            onUpdatePassword = {
+                                navController.navigate("password_updated/Officer") {
+                                    popUpTo("officer_profile") { inclusive = true }
+                                }
+                            }
+                        )
+                    }
+
+                    // ===== ADMIN REVIEW ROUTE =====
+                    composable("admin_review/{complaintId}") { backStackEntry ->
+                        val complaintId = backStackEntry.arguments?.getString("complaintId") ?: ""
+                        AdminReviewScreen(
+                            complaintId = complaintId,
+                            onBack = { navController.popBackStack() },
+                            onReviewComplete = {
+                                navController.navigate("admin_dashboard") {
+                                    popUpTo("admin_dashboard") { inclusive = true }
+                                }
+                            }
+                        )
+                    }
+
+                    // ===== ADMIN OFFICER MANAGEMENT ROUTES =====
+                    composable("manage_officers") {
+                        ManageOfficersScreen(
+                            onBack = { navController.popBackStack() },
+                            onOfficerClick = { officerId ->
+                                navController.navigate("admin_officer_detail/$officerId")
+                            },
+                            onCreateOfficer = { navController.navigate("create_officer") }
+                        )
+                    }
+
+                    composable("admin_officer_detail/{officerId}") { backStackEntry ->
+                        val officerId = backStackEntry.arguments?.getString("officerId") ?: ""
+                        AdminOfficerDetailScreen(
+                            officerId = officerId,
+                            onBack = { navController.popBackStack() },
+                            onComplaintClick = { complaintId ->
+                                navController.navigate("complaint_detail/$complaintId")
+                            }
+                        )
+                    }
+
+                    composable("create_officer") {
+                        CreateOfficerScreen(
+                            onBack = { navController.popBackStack() },
+                            onSuccess = { navController.popBackStack() }
                         )
                     }
 
@@ -295,6 +418,7 @@ class MainActivity : ComponentActivity() {
                             onLogout = { navController.navigate("logout") },
                             onManageCategories = { navController.navigate("manage_categories") },
                             onManageDepartments = { navController.navigate("manage_departments") },
+                            onManageOfficers = { navController.navigate("manage_officers") },
                             onSystemLogs = { navController.navigate("system_logs") }
                         )
                     }

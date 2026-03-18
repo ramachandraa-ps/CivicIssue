@@ -45,6 +45,7 @@ class ComplaintResponse(BaseModel):
     images: List[str] = []
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
+    updates: List[Any] = []
 
 
 class StatusUpdateRequest(BaseModel):
@@ -76,6 +77,7 @@ class ComplaintStats(BaseModel):
     in_progress: int
     resolved: int
     completed: int
+    rework: int = 0
     by_category: dict
     by_severity: dict
     recent_7_days: int
@@ -100,3 +102,27 @@ class MapDataResponse(BaseModel):
     severity_level: str
     status: str
     title: str
+
+
+class ComplaintUpdateCreate(BaseModel):
+    message: str
+    image_url: Optional[str] = None
+
+
+class ComplaintUpdateResponse(BaseModel):
+    id: str
+    complaint_id: str
+    officer_id: str
+    officer_name: Optional[str] = None
+    message: str
+    image_url: Optional[str] = None
+    created_at: Optional[datetime] = None
+
+
+class CompleteComplaintRequest(BaseModel):
+    notes: str
+    resolution_image: Optional[str] = None
+
+
+class ReworkRequest(BaseModel):
+    reason: str

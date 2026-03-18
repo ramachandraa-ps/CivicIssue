@@ -42,7 +42,8 @@ fun ComplaintDetailScreen(
     onBack: () -> Unit,
     onAssignOfficer: () -> Unit,
     onUpdateStatus: (ComplaintStatus) -> Unit,
-    onResolveClick: (String) -> Unit = {}
+    onResolveClick: (String) -> Unit = {},
+    onReviewClick: (String) -> Unit = {}
 ) {
     var complaint by remember { mutableStateOf<Complaint?>(null) }
     var statusHistory by remember { mutableStateOf<List<StatusHistoryItem>>(emptyList()) }
@@ -349,6 +350,84 @@ fun ComplaintDetailScreen(
                 }
             }
 
+            // Progress Updates Section
+            if (comp.updates.isNotEmpty()) {
+                item {
+                    Text(
+                        text = "Progress Updates",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(vertical = 8.dp)
+                    )
+                }
+                items(comp.updates.size) { index ->
+                    val update = comp.updates[index]
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color.White),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    Icons.Default.Person,
+                                    contentDescription = null,
+                                    tint = Color(0xFF1976D2),
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = update.officerName ?: "Officer",
+                                    fontWeight = FontWeight.SemiBold,
+                                    fontSize = 14.sp
+                                )
+                                Spacer(modifier = Modifier.weight(1f))
+                                Text(
+                                    text = update.createdAt?.take(10) ?: "",
+                                    fontSize = 12.sp,
+                                    color = Color.Gray
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(text = update.message, fontSize = 14.sp)
+                            if (update.imageUrl != null) {
+                                Spacer(modifier = Modifier.height(8.dp))
+                                AsyncImage(
+                                    model = RetrofitClient.BASE_URL.trimEnd('/') + update.imageUrl,
+                                    contentDescription = "Update image",
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(150.dp)
+                                        .clip(RoundedCornerShape(8.dp)),
+                                    contentScale = ContentScale.Crop
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            // REWORK Status Warning
+            if (comp.status == "REWORK") {
+                item {
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFFFFEBEE)),
+                        border = BorderStroke(1.dp, Color(0xFFD32F2F))
+                    ) {
+                        Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Warning, contentDescription = null, tint = Color(0xFFD32F2F))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Rework has been requested by admin", color = Color(0xFFD32F2F), fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+                }
+            }
+
             // Timeline Section from real history
             item {
                 Column {
@@ -446,6 +525,22 @@ fun ComplaintDetailScreen(
                                 }
                             }
                         }
+                    }
+                }
+            }
+
+            // Admin Review Button (when officer has completed, admin can review)
+            if (TokenManager.getUserRole() == "admin" && comp.status == "COMPLETED") {
+                item {
+                    Button(
+                        onClick = { onReviewClick(comp.id) },
+                        modifier = Modifier.fillMaxWidth().height(50.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFF9A825))
+                    ) {
+                        Icon(Icons.Default.RateReview, contentDescription = null, tint = Color.White)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Review Completion", fontWeight = FontWeight.Bold, color = Color.White)
                     }
                 }
             }

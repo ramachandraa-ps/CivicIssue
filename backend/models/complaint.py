@@ -21,7 +21,7 @@ class Complaint(Base):
     priority = Column(Enum("LOW", "MEDIUM", "HIGH"), default="MEDIUM")
     severity_level = Column(Enum("LOW", "MEDIUM", "HIGH", "CRITICAL"), default="MEDIUM")
     status = Column(
-        Enum("UNASSIGNED", "ASSIGNED", "IN_PROGRESS", "COMPLETED", "RESOLVED"),
+        Enum("UNASSIGNED", "ASSIGNED", "IN_PROGRESS", "COMPLETED", "RESOLVED", "REWORK"),
         default="UNASSIGNED",
     )
     assigned_officer_id = Column(String(36), nullable=True)

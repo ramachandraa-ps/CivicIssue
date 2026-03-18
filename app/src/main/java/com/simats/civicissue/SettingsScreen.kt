@@ -9,6 +9,7 @@ import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.CorporateFare
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Badge
 import androidx.compose.material.icons.filled.Category
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -31,6 +32,7 @@ fun SettingsScreen(
     onLogout: () -> Unit = {},
     onManageCategories: () -> Unit = {},
     onManageDepartments: () -> Unit = {},
+    onManageOfficers: () -> Unit = {},
     onSystemLogs: () -> Unit = {}
 ) {
     Scaffold(
@@ -104,6 +106,15 @@ fun SettingsScreen(
             
             Spacer(modifier = Modifier.height(16.dp))
             
+            SettingsItem(
+                title = "Manage Officers",
+                subtitle = "View and manage field officers",
+                icon = Icons.Default.Badge,
+                onClick = onManageOfficers
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
             SettingsItem(
                 title = "System Logs",
                 subtitle = "Review platform activity",
