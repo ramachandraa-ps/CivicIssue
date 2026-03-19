@@ -168,6 +168,42 @@ fun ComplaintDetailScreen(
                 }
             }
 
+            // Assigned Officer Info (visible to admin when officer is assigned)
+            if (TokenManager.getUserRole() == "admin" && comp.assignedOfficerName != null) {
+                item {
+                    Card(
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFFE8F5E9)),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(16.dp).fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(0xFF4CAF50)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = comp.assignedOfficerName!!.first().uppercase(),
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 18.sp
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column {
+                                Text("Assigned Officer", fontSize = 11.sp, color = Color.Gray, fontWeight = FontWeight.Bold)
+                                Text(comp.assignedOfficerName!!, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color(0xFF2E7D32))
+                            }
+                        }
+                    }
+                }
+            }
+
             // Description Section
             item {
                 Card(
@@ -545,8 +581,27 @@ fun ComplaintDetailScreen(
                 }
             }
 
-            // Admin Action Buttons (only visible to admins, hidden for resolved complaints)
-            if (TokenManager.getUserRole() == "admin" && comp.status != "RESOLVED" && comp.status != "COMPLETED") {
+            // Assign Officer Button (only for admins, when complaint is unassigned)
+            if (TokenManager.getUserRole() == "admin" && comp.status == "UNASSIGNED") {
+                item {
+                    Button(
+                        onClick = onAssignOfficer,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 16.dp)
+                            .height(50.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50))
+                    ) {
+                        Icon(Icons.Default.PersonAdd, contentDescription = null, tint = Color.White)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Assign Officer", fontWeight = FontWeight.Bold, color = Color.White)
+                    }
+                }
+            }
+
+            // Admin Action Buttons (only visible to admins, for assigned/in-progress complaints)
+            if (TokenManager.getUserRole() == "admin" && comp.status != "RESOLVED" && comp.status != "COMPLETED" && comp.status != "UNASSIGNED") {
                 item {
                     Row(
                         modifier = Modifier
@@ -594,6 +649,18 @@ fun ComplaintDetailScreen(
                                     Text("Start Work", fontWeight = FontWeight.Bold)
                                 }
                             }
+                        }
+                        // Allow re-assigning to a different officer
+                        OutlinedButton(
+                            onClick = onAssignOfficer,
+                            modifier = Modifier.weight(1f).height(50.dp),
+                            shape = RoundedCornerShape(12.dp),
+                            border = BorderStroke(1.dp, Color(0xFF4CAF50)),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF4CAF50))
+                        ) {
+                            Icon(Icons.Default.PersonAdd, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Reassign", fontWeight = FontWeight.Bold)
                         }
                         Button(
                             onClick = { onResolveClick(comp.id) },

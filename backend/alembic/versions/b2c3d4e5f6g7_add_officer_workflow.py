@@ -1,6 +1,7 @@
 """Add officer workflow - REWORK status and complaint_updates table"""
 
 from alembic import op
+from sqlalchemy import inspect
 import sqlalchemy as sa
 
 revision = "b2c3d4e5f6g7"
@@ -18,15 +19,18 @@ def upgrade():
         existing_nullable=True,
     )
 
-    op.create_table(
-        "complaint_updates",
-        sa.Column("id", sa.String(36), primary_key=True),
-        sa.Column("complaint_id", sa.String(36), sa.ForeignKey("complaints.id"), nullable=False),
-        sa.Column("officer_id", sa.String(36), sa.ForeignKey("users.id"), nullable=False),
-        sa.Column("message", sa.Text, nullable=False),
-        sa.Column("image_url", sa.String(500), nullable=True),
-        sa.Column("created_at", sa.TIMESTAMP, server_default=sa.func.now()),
-    )
+    bind = op.get_bind()
+    insp = inspect(bind)
+    if "complaint_updates" not in insp.get_table_names():
+        op.create_table(
+            "complaint_updates",
+            sa.Column("id", sa.String(36), primary_key=True),
+            sa.Column("complaint_id", sa.String(36), sa.ForeignKey("complaints.id"), nullable=False),
+            sa.Column("officer_id", sa.String(36), sa.ForeignKey("users.id"), nullable=False),
+            sa.Column("message", sa.Text, nullable=False),
+            sa.Column("image_url", sa.String(500), nullable=True),
+            sa.Column("created_at", sa.TIMESTAMP, server_default=sa.func.now()),
+        )
 
 
 def downgrade():
